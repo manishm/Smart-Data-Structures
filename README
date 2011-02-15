@@ -1,0 +1,8 @@
+Implementation details to consider when building on Smart Data Structures
+
+TODO:
+* improve portability to non-x86_64; it's mostly there now but needs additions to portable defs
+* make time-based-wait in FCBase portable across machines; is nanosleep accurate enough?
+* implement data structure peek (contain) methods and more if desired
+* fix bug in ComTreeQueue consistently preventing it from running. is it a simple error?
+* fix bug in OyamaQueueCom that causes infrequent segfault
