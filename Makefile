@@ -5,9 +5,9 @@ TARGET		= main_intel64
 CPP		= g++
 
 INCFLAGS        = -Idata_structures -Iframework -Imonitor -Irl_engine -Irl_engine/Seldon-5.0.1
-DEFFLAGS        = -DNDEBUG -DINTEL64 -D_REENTRANT
+DEFFLAGS        = -DINTEL64 -D_REENTRANT
 CPPFLAGS	= -MD -O3 -m64 $(INCFLAGS) $(DEFFLAGS) -lrt -pthread -llapack
-LFLAGS		= -O3 -m64 -DNDEBUG -DINTEL64 -D_REENTRANT -lrt -pthread -llapack
+LFLAGS		= -O3 -m64 $(DEFFLAGS) -lrt -pthread -llapack
 
 OBJS		= $(CPPSRCS:.cpp=.o)
 REGRESSOBJS     = $(subst main,regress,$(OBJS)) 

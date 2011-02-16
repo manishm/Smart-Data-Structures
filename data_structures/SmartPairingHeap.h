@@ -101,8 +101,6 @@ public:
                 _REP_THRESHOLD((int)(Math::ceil(FCBase<T>::_NUM_THREADS/(1.7)))),
                 _hbmon(hbmon)
         {
-                FCBase<T>::_tail_slot.set(new SlotInfo());
-
                 int mode = LearningEngine::disabled;
                 if ( 0 != FCBase<T>::_enable_lock_scheduling ) mode |= LearningEngine::lock_scheduling;
                 if ( 0 != FCBase<T>::_enable_scancount_tuning ) mode |= LearningEngine::scancount_tuning;
@@ -129,6 +127,7 @@ public:
                 FCIntPtr volatile* my_re_ans = &my_slot->_req_ans;
                 *my_re_ans = inValue;
 
+                //this is needed because the combiner may remove you
                 if (null == my_next)
                    FCBase<T>::enq_slot(my_slot);
 
@@ -159,6 +158,7 @@ public:
                 FCIntPtr volatile* my_re_ans = &my_slot->_req_ans;
                 *my_re_ans = FCBase<T>::_DEQ_VALUE;
 
+                //this is needed because the combiner may remove you
                 if(null == my_next)
                    FCBase<T>::enq_slot(my_slot);
 

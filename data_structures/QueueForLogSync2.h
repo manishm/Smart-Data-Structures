@@ -63,7 +63,7 @@ private:
                 Node* volatile  _next;
                 _T* const       _value;
 
-                Node(_T* const x) : _value(x) {}
+                Node(_T* const x) : _value(x), _next(null) {}
         };
 
 

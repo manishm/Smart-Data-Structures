@@ -79,7 +79,7 @@ private:
                 }
         }
 
-        PairNode** doubleIfFull( PairNode** inAry, int index ) {
+        void doubleIfFull( PairNode** &inAry, int index ) {
                 if ( index == _tree_ary_size ) {
                         PairNode** oldArray = inAry;
 
@@ -87,8 +87,8 @@ private:
                         inAry = new PairNode*[ 2 * index ];
                         for( int i = 0; i < index; ++i )
                                 inAry[i] = oldArray[i];
+                        delete[] oldArray;
                 }
-                return inAry;
         }
 
         PairNode* combineSiblings( PairNode* firstSibling ) {
@@ -97,13 +97,13 @@ private:
 
                 int numSiblings = 0;
                 for( ; null != firstSibling; ++numSiblings ) {
-                        _treeArray = doubleIfFull( _treeArray, numSiblings );
+                        doubleIfFull( _treeArray, numSiblings );
                         _treeArray[ numSiblings ] = firstSibling;
                         firstSibling->_prev->_nextSibling = null;  // break links
                         firstSibling = firstSibling->_nextSibling;
                 }
 
-                _treeArray = doubleIfFull( _treeArray, numSiblings );
+                doubleIfFull( _treeArray, numSiblings );
                 _treeArray[ numSiblings ] = null;
 
                 int i = 0;
@@ -140,6 +140,11 @@ public:
                 }
         }
 
+        ~PairHeap() {
+                delete   _root;
+                delete[] _treeArray;
+        }
+
         PairNode* insert( PtrNode<T>* final x ) {
                 PairNode* newNode = new PairNode( x );
 
@@ -155,10 +160,14 @@ public:
                         return null;
 
                 PtrNode<T>* final x = findMin();
-                if( null == _root->_leftChild )
+                if( null == _root->_leftChild ) {
+                        delete _root;
                         _root = null;
-                else
+                } else {
+                        PairNode* tmp = _root;
                         _root = combineSiblings( _root->_leftChild );
+                        delete tmp;
+                }
                 return x;
         }
 

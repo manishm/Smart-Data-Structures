@@ -122,7 +122,9 @@ private:
                                 } else {
                                         curr_req->_req_ans = FCBase<T>::_NULL_VALUE;
                                 } 
-                        }
+                        } else {
+			        assert( false );
+			}
 
                         if ( i+1 < FCBase<T>::_NUM_THREADS )
                                 curr_req = _log.deq(my_cas_info);

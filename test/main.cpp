@@ -45,7 +45,7 @@
 #include "BasketsQueue.h"
 //#include "ComTreeQueue.h"
 #include "OyamaQueue.h"
-#include "OyamaQueueCom.h"
+//#include "OyamaQueueCom.h"
 //skiplists
 #include "FCSkipList.h"
 #include "SmartSkipList.h"
@@ -452,9 +452,11 @@ int main(int argc, char **argv) {
         for (int iDb=0; iDb<_num_ds; ++iDb) {
                 _gDS[iDb]->print_custom();
                 printf(" **%d %d**", (_gEndTime - _gStartTime), _gResult * (_gEndTime - _gStartTime));
-                //delete _gDS[iDb]; 
+                delete _gDS[iDb]; 
                 _gDS[iDb] = null;
         }
+	delete _hbmon;
+
 }
 
 
@@ -694,9 +696,10 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name) {
         if(0 == strcmp(alg_name, "oyqueue")) {
                   return (new OyamaQueue<FCIntPtr>());
         }
-        if(0 == strcmp(alg_name, "oyqueuecom")) {
-                  return (new OyamaQueueCom<FCIntPtr>());
-        }
+        //not working yet
+        //if(0 == strcmp(alg_name, "oyqueuecom")) {
+        //          return (new OyamaQueueCom<FCIntPtr>());
+        //}
 
         //skiplist .................................................................
         if(0 == strcmp(alg_name, "fcskiplist")) {

@@ -92,6 +92,11 @@ public:
                 _top_indx = 0;
         }
 
+        ~FCStack()
+        {
+                delete[] _stack_ary;
+        }
+
         //push ......................................................
         boolean add(final int iThread, PtrNode<T>* final inPtr) {
                 final FCIntPtr inValue = (FCIntPtr) inPtr;

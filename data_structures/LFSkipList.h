@@ -229,7 +229,9 @@ public://methods
                                         // run find to remove links of the logically removed node
                                         find(key, null, succs);
                                         _lock_removemin.unlock();
-                                        return pNodeToRemove->_element;
+					PtrNode<T>* rv = pNodeToRemove->_element;
+					//delete pNodeToRemove;
+                                        return rv;
                                 } else if (marked) {
                                         _lock_removemin.unlock();
                                         return FCBase<T>::_NULL_VALUE; // someone else removed node
@@ -237,7 +239,9 @@ public://methods
                                 // else only pSucc changed so repeat
                         }
                         _lock_removemin.unlock();
-                        return pNodeToRemove->_element;
+			PtrNode<T>* rv = pNodeToRemove->_element;
+			//delete pNodeToRemove;
+                        return rv;
                 }
         }
 

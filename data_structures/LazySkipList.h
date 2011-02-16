@@ -263,7 +263,9 @@ public:
                         _head->Unlock();
                         remove_node->Unlock();
 
-                        return remove_node->_element;
+			PtrNode<T>* rv = remove_node->_element;
+			//delete remove_node;
+                        return rv;
                 }
         }
 

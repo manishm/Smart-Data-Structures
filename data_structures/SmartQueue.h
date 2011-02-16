@@ -113,7 +113,7 @@ private:
                                         if(num_added >= _NODE_SIZE) {
                                                 Node* final new_node2 = Node::get_new(_NODE_SIZE+4);
                                                 memcpy((void*)(new_node2->_values), (void*)(_new_node->_values), (_NODE_SIZE+2)*sizeof(FCIntPtr) );
-                                                //free(_new_node);
+                                                free(_new_node);
                                                 _new_node = new_node2; 
                                                 enq_value_ary = _new_node->_values;
                                                 *enq_value_ary = 1;
@@ -129,7 +129,9 @@ private:
                                                 curr_slot->_time_stamp = FCBase<T>::_NULL_VALUE;
                                                 ++deq_value_ary;
                                         } else if(null != _tail->_next) {
+                                                Node* tmp = _tail;
                                                 _tail = _tail->_next;
+                                                free(tmp);
                                                 deq_value_ary = _tail->_values;
                                                 deq_value_ary += deq_value_ary[0];
                                                 continue;
@@ -152,7 +154,9 @@ private:
 
 
                 if(0 == *deq_value_ary && null != _tail->_next) {
+                        Node* tmp = _tail;
                         _tail = _tail->_next;
+                        free(tmp);
                 } else {
                         _tail->_values[0] = (deq_value_ary -  _tail->_values);
                 }
@@ -177,7 +181,6 @@ public:
                 _head->_values[0] = 1;
                 _head->_values[1] = 0;
 
-                FCBase<T>::_tail_slot.set(new SlotInfo());
                 FCBase<T>::_timestamp = 0;
                 _NODE_SIZE = 4;
                 _new_node = null;
@@ -210,6 +213,7 @@ public:
                 FCIntPtr volatile* my_re_ans = &my_slot->_req_ans;
                 *my_re_ans = inValue;
 
+                //this is needed because the combiner may remove you
                 if (null == my_next)
                         FCBase<T>::enq_slot(my_slot);
 
@@ -240,6 +244,7 @@ public:
                 FCIntPtr volatile* my_re_ans = &my_slot->_req_ans;
                 *my_re_ans = FCBase<T>::_DEQ_VALUE;
 
+                //this is needed because the combiner may remove you
                 if(null == my_next)
                         FCBase<T>::enq_slot(my_slot);
 

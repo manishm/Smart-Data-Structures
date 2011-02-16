@@ -84,6 +84,7 @@ protected://Flat Combining fields
         Node*                      preds[_MAX_LEVEL + 1];
         Node*                      succs[_MAX_LEVEL + 1];
         SlotInfo*                  _saved_remove_node[1024];
+        Node*                      _saved_node_ptr[1024];
         Hb*                        _hbmon;
         LearningEngine*            _learner;
 
@@ -198,6 +199,7 @@ protected://methods
                                         //REMOVE ...................................................
                                         _saved_remove_node[num_removed] = curr_slot;
                                         ++num_removed;
+                                        assert(num_removed < 1024);
                                         curr_slot = curr_slot->_next;
                                         continue;
                                 } else {
@@ -212,6 +214,7 @@ protected://methods
                 //..................................................................
                 Node* remove_node = (_head->_next[0]);
                 int max_level = -1;
+                int iSaved = 0;
                 for (int iRemove=0; iRemove<num_removed; ++iRemove) {
 
                         if ( _tail != remove_node ) {
@@ -226,6 +229,7 @@ protected://methods
                                         if(remove_node->_top_level > max_level) {
                                                 max_level = remove_node->_top_level;
                                         }
+                                        _saved_node_ptr[iSaved++] = remove_node;
                                         remove_node = remove_node->_next[0];
                                 } 
                         }
@@ -261,6 +265,9 @@ protected://methods
                         }
                 }
 
+                for(int i = 0; i < iSaved; i++)
+                        free(_saved_node_ptr[i]);
+
         }
 
 public://methods
@@ -275,9 +282,6 @@ public://methods
                 //initialize head to point to tail .....................................
                 for (int iLevel = 0; iLevel < _head->_top_level; ++iLevel)
                         _head->_next[iLevel] = _tail;
-
-                //initialize the slots .........................................
-                FCBase<T>::_tail_slot.set(new SlotInfo());
 
                 int mode = LearningEngine::disabled;
                 if ( 0 != FCBase<T>::_enable_lock_scheduling ) mode |= LearningEngine::lock_scheduling;
@@ -308,6 +312,7 @@ public://methods
                 FCIntPtr volatile* my_re_ans = &my_slot->_req_ans;
                 *my_re_ans = inValue;
 
+                //this is needed because the combiner may remove you
                 if (null == my_next)
                    FCBase<T>::enq_slot(my_slot);
 
@@ -338,6 +343,7 @@ public://methods
                 FCIntPtr volatile* my_re_ans = &my_slot->_req_ans;
                 *my_re_ans = FCBase<T>::_DEQ_VALUE;
 
+                //this is needed because the combiner may remove you
                 if(null == my_next)
                    FCBase<T>::enq_slot(my_slot);
 

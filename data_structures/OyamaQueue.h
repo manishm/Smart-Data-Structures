@@ -47,7 +47,7 @@ private:
 
         struct Req {
                 VolatileType<FCIntPtr> _req_ans;
-                int                         _d1,d2,d3,d4;
+                int                    _d1,d2,d3,d4;
 
                 Req(final FCIntPtr in_req) : _req_ans(in_req) { }
         };

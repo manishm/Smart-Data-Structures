@@ -77,6 +77,7 @@ struct SlotInfo {
         FCIntPtr volatile      _req_ans;       //here 1 can post the request and wait for answer
         int volatile           _time_stamp;    //when 0 not connected
         SlotInfo* volatile     _next;          //when null not connected
+        SlotInfo* volatile     _prev;
         void*                  _custem_info;
         bool                   _deq_pending;
 
@@ -84,6 +85,7 @@ struct SlotInfo {
                 _req_ans     = _FC_NULL_VALUE;
                 _time_stamp  = 0;
                 _next        = null;
+                _prev        = null;
                 _custem_info = null;
                 _deq_pending = false;
         }
@@ -181,9 +183,28 @@ protected:
         //list fields -----------------------------------
         CCP::ThreadLocal<SlotInfo*>    _tls_slot_info;
         CCP::AtomicReference<SlotInfo> _tail_slot;
+        CCP::AtomicReference<SlotInfo> _head_slot;
         int volatile                   _timestamp;
 
         //list helper function --------------------------
+        void init_slot_list() {
+                SlotInfo* tmp = new SlotInfo();
+                _tail_slot.set(tmp);
+                _head_slot.set(tmp);
+        }
+
+        void deinit_slot_list() {
+                //needed so we see write to _prev in get_new_slot or enq_slot
+                CCP::Memory::read_write_barrier();
+
+                SlotInfo *slot = _head_slot.get();
+                do {
+                        SlotInfo *tmp = slot;
+                        slot = slot->_prev;
+                        delete tmp;
+                } while ( slot != null );
+        }
+
         SlotInfo* get_new_slot() {
                 SlotInfo* my_slot= new SlotInfo();
                 _tls_slot_info.set(my_slot);
@@ -193,6 +214,7 @@ protected:
                         curr_tail = _tail_slot.get();
                         my_slot->_next = curr_tail;
                 } while(false == _tail_slot.compareAndSet(curr_tail, my_slot));
+		curr_tail->_prev = my_slot;
 
                 return my_slot;
         }
@@ -203,6 +225,7 @@ protected:
                         curr_tail = _tail_slot.get();
                         p_slot->_next = curr_tail;
                 } while(false == _tail_slot.compareAndSet(curr_tail, p_slot));
+		curr_tail->_prev = p_slot;
         }
 
         void enq_slot_if_needed(SlotInfo* p_slot) {
@@ -228,11 +251,14 @@ public:
                 _IS_USE_CONDITION(is_use_condition),
                 _sync_count(0)
         {
-                //init sparc specific
                 init_architecture_specific();
+                init_slot_list();
         }
 
-        virtual ~FCBase() {}
+        virtual ~FCBase() 
+        {
+                deinit_slot_list();
+        }
         
         virtual void cas_reset(final int iThread) {
                 _cas_info_ary[iThread].reset();;

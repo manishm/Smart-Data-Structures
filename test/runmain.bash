@@ -1,28 +1,28 @@
 #!/bin/bash
 
-#////////////////////////////////////////////////////////////////////////////////             
-#// File    : runmain.bash                                                                        
-#// Authors : Jonathan Eastep   email: jonathan.eastep@gmail.com                              
-#//           Ms.Moran Tzafrir  email: morantza@gmail.com                                     
-#// Written : 16 February 2011, 13 October 2009                                               
+#//////////////////////////////////////////////////////////////////////////////// 
+#// File    : runmain.bash                                          
+#// Authors : Jonathan Eastep   email: jonathan.eastep@gmail.com  
+#//           Ms.Moran Tzafrir  email: morantza@gmail.com  
+#// Written : 16 February 2011, 13 October 2009 
+#//                                                         
+#// Bash script for running the multi-platform benchamrk main.cpp
+#//                                                       
+#// Copyright (C) 2011 Jonathan Eastep, 2009 Moran Tzafrir. 
 #//                                                                                           
-#// Bash script for running the multi-platform benchamrk main.cpp                                   
-#//                                                                                           
-#// Copyright (C) 2011 Jonathan Eastep, 2009 Moran Tzafrir.                                   
-#//                                                                                           
-#// This program is free software; you can redistribute it and/or modify                      
-#// it under the terms of the GNU General Public License as published by                      
-#// the Free Software Foundation; either version 2 of the License, or                         
-#// (at your option) any later version.                                                       
-#//                                                                                           
-#// This program is distributed in the hope that it will be useful, but                       
-#// WITHOUT ANY WARRANTY; without even the implied warranty of                                
-#// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU                          
-#// General Public License for more details.                                                  
-#//                                                                                           
-#// You should have received a copy of the GNU General Public License                         
-#// along with this program; if not, write to the Free Software Foundation                    
-#// Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA                               
+#// This program is free software; you can redistribute it and/or modify 
+#// it under the terms of the GNU General Public License as published by 
+#// the Free Software Foundation; either version 2 of the License, or 
+#// (at your option) any later version.  
+#//                                    
+#// This program is distributed in the hope that it will be useful, but 
+#// WITHOUT ANY WARRANTY; without even the implied warranty of       
+#// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU 
+#// General Public License for more details.                    
+#//                                                        
+#// You should have received a copy of the GNU General Public License   
+#// along with this program; if not, write to the Free Software Foundation 
+#// Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA       
 #////////////////////////////////////////////////////////////////////////////////
 
 
@@ -36,10 +36,9 @@ delays="800"
 threads="14"
 
 #which algorithms to benchmark
-algorithms="fcqueue fcskiplist fcpairheap smartqueue smartskiplist smartpairheap msqueue basketsqueue ctqueue lfskiplist lazyskiplist lazyskiplist fcstack lfstack elstack"
+#algorithms="fcqueue fcskiplist fcpairheap smartqueue smartskiplist smartpairheap msqueue basketsqueue ctqueue lfskiplist lazyskiplist fcstack lfstack elstack"
 #algorithms="smartqueue smartskiplist smartpairheap"
-#algorithms="smartpairheap"
-#algorithms="smartqueue"
+algorithms="oyamaqueuecom"
 
 #the setting to use for the flat combining scancount parameter
 #use 0 if you want it to be nthreads

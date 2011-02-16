@@ -82,9 +82,7 @@ public:
         FCPairHeap()
         :       _NUM_REP(FCBase<T>::_NUM_THREADS),
                 _REP_THRESHOLD((int)(Math::ceil(FCBase<T>::_NUM_THREADS/(1.7))))
-        {
-                FCBase<T>::_tail_slot.set(new SlotInfo());
-        }
+        { }
 
         //enq ......................................................
         boolean add(final int iThread, PtrNode<T>* final inPtr) {
@@ -100,6 +98,7 @@ public:
                 my_re_ans = inValue;
 
                 do {
+                        //this is needed because the combiner may remove you
                         if (null == my_next)
                                 FCBase<T>::enq_slot(my_slot);
 
@@ -143,6 +142,7 @@ public:
                 my_re_ans = FCBase<T>::_DEQ_VALUE;
 
                 do {
+                        //this is needed because the combiner may remove you
                         if(null == my_next)
                                 FCBase<T>::enq_slot(my_slot);
 

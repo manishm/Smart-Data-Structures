@@ -1,27 +1,27 @@
 //FIXME: This file is woefully poor at regression testing. 
 
-////////////////////////////////////////////////////////////////////////////////               
-// File    : regress.cpp                                                                 
-// Author  : Jonathan Eastep   email: jonathan.eastep@gmail.com                                
+//////////////////////////////////////////////////////////////////////////////// 
+// File    : regress.cpp                                                        
+// Author  : Jonathan Eastep   email: jonathan.eastep@gmail.com                  
 // Written : 16 February 2011
-//                                                                                             
+//                                        
 // Copyright (C) 2011 Jonathan Eastep
 //
 // Multi-Platform regression test for Smart Data Structures
-//                                                                                             
-// This program is free software; you can redistribute it and/or modify                        
-// it under the terms of the GNU General Public License as published by                        
-// the Free Software Foundation; either version 2 of the License, or                           
-// (at your option) any later version.                                                         
-//                                                                                             
-// This program is distributed in the hope that it will be useful, but                         
-// WITHOUT ANY WARRANTY; without even the implied warranty of                                  
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU                            
-// General Public License for more details.                                                    
-//                                                                                             
-// You should have received a copy of the GNU General Public License                           
-// along with this program; if not, write to the Free Software Foundation                      
-// Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA                                 
+//                 
+// This program is free software; you can redistribute it and/or modify    
+// it under the terms of the GNU General Public License as published by  
+// the Free Software Foundation; either version 2 of the License, or    
+// (at your option) any later version.                                 
+//                
+// This program is distributed in the hope that it will be useful, but 
+// WITHOUT ANY WARRANTY; without even the implied warranty of        
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU    
+// General Public License for more details.                             
+//          
+// You should have received a copy of the GNU General Public License         
+// along with this program; if not, write to the Free Software Foundation   
+// Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA          
 //////////////////////////////////////////////////////////////////////////////// 
 
 #include <iostream>
@@ -54,11 +54,12 @@
 using namespace CCP;
 using namespace std;
 
-#define NUMTRIALS (100)
+#define NUMTRIALS (20)
 
 FCBase<FCIntPtr>*  queue;
 FCBase<FCIntPtr>*  queue2;
 
+typedef FCIntPtr      lli;
 
 //#define SMART
 #define QUEUE2
@@ -123,13 +124,15 @@ void * func(void* args)
 	for(int i = 0; i < total; i++)
 	{
 	        RandSleep();
-		FCIntPtrNode* res; 
+                //volatile so the compiler doesn't optimize it out
+                FCIntPtrNode* volatile res;  
 		do {
 		      res = (FCIntPtrNode*) queue->remove(tid, NULL);
 		      //cerr << dec << "outValue1 = " << (res->getvalue()) << endl;	  
 		} while (NULL == res);
 		//cerr << dec << "outValue1 = " << (res->getvalue()) << endl;
 		results1[CACHE_LINE_SIZE*(res->getvalue()-1)] = true;
+                //cerr << "freeing " << res << endl;
 		delete res;
 
 #ifdef QUEUE2
@@ -140,6 +143,7 @@ void * func(void* args)
 		} while (NULL == res);
 		//cerr << dec << "outValue2 = " << (res->getvalue()) << endl;
 		results2[CACHE_LINE_SIZE*(res->getvalue()-1)] = true;
+                //cerr << "freeing " << res << endl;
 		delete res;
 #endif
 	}
@@ -299,71 +303,102 @@ bool serial_test(FCBase<FCIntPtr>* queue, TESTTYPE type)
 	return rv;
 }
 
+bool destruct_test(FCBase<lli>** ds1, FCBase<lli>** ds2, int num_ds, Hb* hbmon)
+{
+        bool rv = true;
+        try {
+
+                for(int i = 0; i < num_ds; i++) {
+                        delete ds1[i];
+                        delete ds2[i];
+                }
+		delete hbmon;
+        }
+        catch(...) {
+	        cerr << "Failed destruct test" << endl;
+	        rv = false;
+        }
+	return rv;
+}
+
 
 int main(int argc, char* argv[])
 {
 
         Hb*                   hbmon = new Hb();
-	typedef FCIntPtr      lli;
-	const int             NUMDS = 16;
 
-	FCBase<lli>* ds1[NUMDS] = { new FCQueue<lli>(), new SmartQueue<lli>(hbmon), new MSQueue<lli>(), new BasketsQueue<lli>(),
-                                    null /*new ComTreeQueue<lli>()*/, new OyamaQueue<lli>(), new OyamaQueueCom<lli>(),
-			            new FCSkipList<lli>(), new SmartSkipList<lli>(hbmon), new LFSkipList<lli>(),
-			            new LazySkipList<lli>(), new FCPairHeap<lli>(), new SmartPairHeap<lli>(hbmon),
+        const int             NUMDS = 16;
+
+        FCBase<lli>* ds1[NUMDS] = { new FCQueue<lli>(), new SmartQueue<lli>(hbmon), new MSQueue<lli>(), new BasketsQueue<lli>(),
+                                    null /*new ComTreeQueue<lli>()*/, new OyamaQueue<lli>(), null /*new OyamaQueueCom<lli>()*/,
+                                    new FCSkipList<lli>(), new SmartSkipList<lli>(hbmon), new LFSkipList<lli>(),
+                                    new LazySkipList<lli>(), new FCPairHeap<lli>(), new SmartPairHeap<lli>(hbmon),
                                     new FCStack<lli>(), new LFStack<lli>(), new EliminationStack<lli>() };
 
 #ifdef QUEUE2
-	FCBase<lli>* ds2[NUMDS] = { new FCQueue<lli>(), new SmartQueue<lli>(hbmon), new MSQueue<lli>(), new BasketsQueue<lli>(),
-                                    null /*new ComTreeQueue<lli>()*/, new OyamaQueue<lli>(), new OyamaQueueCom<lli>(),
-			            new FCSkipList<lli>(), new SmartSkipList<lli>(hbmon), new LFSkipList<lli>(),
-				    new LazySkipList<lli>(), new FCPairHeap<lli>(), new SmartPairHeap<lli>(hbmon),
-				    new FCStack<lli>(), new LFStack<lli>(), new EliminationStack<lli>() };
+        FCBase<lli>* ds2[NUMDS] = { new FCQueue<lli>(), new SmartQueue<lli>(hbmon), new MSQueue<lli>(), new BasketsQueue<lli>(),
+                                    null /*new ComTreeQueue<lli>()*/, new OyamaQueue<lli>(), null /*new OyamaQueueCom<lli>()*/,
+                                    new FCSkipList<lli>(), new SmartSkipList<lli>(hbmon), new LFSkipList<lli>(),
+                                    new LazySkipList<lli>(), new FCPairHeap<lli>(), new SmartPairHeap<lli>(hbmon),
+                                    new FCStack<lli>(), new LFStack<lli>(), new EliminationStack<lli>() };
 #else
-	FCBase<lli>* ds2[NUMDS] = {null};
+        FCBase<lli>* ds2[NUMDS] = {null};
 #endif
 
-	int PRISTART = 7;
-	int STACKSTART = 13;
+        int PRISTART = 7;
+        int STACKSTART = 13;
 
 
-	Memory::read_write_barrier();
-	
-	bool megatotal = true;
-	int megafails = 0;
+        Memory::read_write_barrier();
+        
+        bool megatotal = true;
+        int megafails = 0;
+	int megaskips = 0;
 
-	for(int j = 0; j < NUMDS; j++) {
+        for(int j = 0; j < NUMDS; j++) {
 
-	        bool rv, stotal = true, ptotal = true;
+                bool rv, stotal = true, ptotal = true;
 
-		queue = ds1[j];
-		queue2 = ds2[j];
+                queue = ds1[j];
+                queue2 = ds2[j];
 
-		for(int i = 0; i < NUMTRIALS; i++) {
-		        TESTTYPE type = (j < PRISTART) ? FIFO : ((j < STACKSTART) ? PRI : LIFO);
-			rv = serial_test(queue, type);
-			megafails += rv ? 0 : 1;
-			stotal &= rv;
-		}
-		if ( stotal )
-		        cerr << "Passed all serial tests of " << queue->name() << endl;
+                for(int i = 0; i < NUMTRIALS; i++) {
+                        TESTTYPE type = (j < PRISTART) ? FIFO : ((j < STACKSTART) ? PRI : LIFO);
+                        rv = serial_test(queue, type);
+                        megafails += rv ? 0 : 1;
+                        megaskips += (null == queue) ? 1 : 0;
+                        stotal &= rv;
+                }
+                if ( stotal )
+                        cerr << "Passed all serial tests of " << queue->name() << endl;
 
-		for(int i = 0; i < NUMTRIALS; i++) {
-		        rv = parallel_test(queue, queue2);
-			megafails += rv ? 0 : 1;
-			ptotal &= rv;
-		}
-		if ( ptotal )
-		        cerr << "Passed all parallel tests of " << queue->name() << endl;
+                for(int i = 0; i < NUMTRIALS; i++) {
+                        rv = parallel_test(queue, queue2);
+                        megafails += rv ? 0 : 1;
+#ifdef QUEUE2
+                        megaskips += ((null == queue) || (null == queue2)) ? 1 : 0;
+#else
+                        megaskips += (null == queue) ? 1 : 0;
+#endif
+                        ptotal &= rv;
+                }
+                if ( ptotal )
+                        cerr << "Passed all parallel tests of " << queue->name() << endl;
 
-		megatotal &= stotal;
-		megatotal &= ptotal;
-	}
+                megatotal &= stotal;
+                megatotal &= ptotal;
+        }
 
-	if ( megatotal )
-	        cerr << "Passed all tests" << endl;
+        bool rv = destruct_test(ds1, ds2, NUMDS, hbmon);
+        megafails += rv ? 0 : 1;
+        megatotal &= rv;
+
+        cerr << "Passed object destruction test" << endl;
+
+        if ( megatotal )
+                cerr << "Passed all tests" << endl;
         else
                 cerr << "Failed " << megafails << " out of " << (NUMDS*NUMTRIALS*2) 
-                     << " tests. Check output" << endl;
+                     << " tests. " << megaskips << " were due to skips. Check output" << endl;
 
 }
