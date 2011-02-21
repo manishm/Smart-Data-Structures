@@ -102,6 +102,7 @@ public:
         static int          _enable_lock_scheduling;
         static int          _dynamic_work_size;
         static int          _dynamic_work_intervals;
+        static double       _rl_to_sleepidle_ratio;
 
         static final FCIntPtr _NULL_VALUE = _FC_NULL_VALUE;
         static final FCIntPtr _DEQ_VALUE  = _FC_DEQ_VALUE;

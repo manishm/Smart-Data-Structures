@@ -64,9 +64,9 @@ private:
                 else
                         maxPasses = 1 + 2*_learner->getdiscval(0);
 
-                int num_changes = 0;
-
+                int total_changes = 0;
                 for (int iTry=0;iTry<maxPasses; ++iTry) {
+		        int num_changes = 0;
                         //Memory::read_barrier();
 
                         SlotInfo* curr_slot = FCBase<T>::_tail_slot.get();
@@ -88,10 +88,13 @@ private:
                                 curr_slot = curr_slot->_next;
                         }//while on slots
 
+                        total_changes += num_changes;
+
                 }//for repetition
 
-                if ( num_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
-                        _hbmon->heartbeat(num_changes);
+                if ( total_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
+                        _hbmon->heartbeat(total_changes);
+
         }       
         
 public:
@@ -102,9 +105,15 @@ public:
                 _hbmon(hbmon)
         {
                 int mode = LearningEngine::disabled;
-                if ( 0 != FCBase<T>::_enable_lock_scheduling ) mode |= LearningEngine::lock_scheduling;
-                if ( 0 != FCBase<T>::_enable_scancount_tuning ) mode |= LearningEngine::scancount_tuning;
-                _learner = new LearningEngine(FCBase<T>::_NUM_THREADS, hbmon, (LearningEngine::learning_mode_t) mode);
+                if ( 0   != FCBase<T>::_enable_lock_scheduling )  mode |= LearningEngine::lock_scheduling;
+                if ( 0   != FCBase<T>::_enable_scancount_tuning ) mode |= LearningEngine::scancount_tuning;
+                if ( 1.0 != FCBase<T>::_rl_to_sleepidle_ratio )   mode |= LearningEngine::inject_delay;
+
+                _learner = new LearningEngine(FCBase<T>::_NUM_THREADS, 
+                                              hbmon, 
+                                              (LearningEngine::learning_mode_t) mode, 
+                                              FCBase<T>::_rl_to_sleepidle_ratio );
+
                 _fc_lock = new SmartLockLite<FCIntPtr>(FCBase<T>::_NUM_THREADS, _learner);
                 Memory::read_write_barrier();
         }

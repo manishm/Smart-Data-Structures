@@ -27,8 +27,8 @@
 
 
 #sets the ns between data structure ops (aka load or arrival rate) in the benchmark
-#delays="6400 3200 1600 800 400 200 100"
-delays="800"
+delays="6400 3200 1600 800 400 200 100"
+#delays="800"
 #delays="12800 6400 3200 1600 800 400 200 100"
 
 #sets the level of concurrency 
@@ -38,12 +38,13 @@ threads="14"
 #which algorithms to benchmark
 #algorithms="fcqueue fcskiplist fcpairheap smartqueue smartskiplist smartpairheap msqueue basketsqueue ctqueue lfskiplist lazyskiplist fcstack lfstack elstack"
 #algorithms="smartqueue smartskiplist smartpairheap"
-algorithms="oyamaqueuecom"
+#algorithms="oyamaqueuecom"
+algorithms="smartskiplist smartpairheap"
 
 #the setting to use for the flat combining scancount parameter
 #use 0 if you want it to be nthreads
-#scancounts="1 3 5 7 9 11 13 15 17 19 21 23 25"
-scancounts="0"
+scancounts="1 3 5 7 9 11 13 15 17 19 21 23 25"
+#scancounts="0"
 
 #currently deprecated
 #syncintervals="1000000 100000 10000 1000 100 10 1"
@@ -61,7 +62,7 @@ removeops="99"
 #addops="50"
 #removeops="50"
 
-#configure this to have a changing amount of postcomputation work each second
+#configure this to have a changing amount of postcomputation work
 #dynamicworkamt="1"
 #dynamicworkintervals="1 10 100 1000 10000"
 #use this for none
@@ -69,8 +70,17 @@ dynamicworkamt="0"
 dynamicworkintervals="0"
 
 #machine learning enablement
-scancounttuning="1"
+#scancount tuning off
+#scancounttuning="0"
+#lockscheduling="0"
+#scancount tuning on
+scancounttuning="0"
 lockscheduling="0"
+
+#configure to simulate slowdown of rl thread 
+#rltime / totaltime
+#rltosleepidleratios="1.0 .1 .01 .001"
+rltosleepidleratios="1.0"
 
 #how many trials of each experiment to perform
 reps="0 1 2 3 4 5 6 7 8 9"
@@ -94,13 +104,15 @@ for thread in $threads; do
 
 for scancount in $scancounts; do
 
+for rltosleepidleratio in $rltosleepidleratios; do
+
 	count=$(($count + 1))
 
         line=""
 	if [ "$scancount" = "0" ]; then
-                 line="$algorithm 1 non 0 non 0 non 0 $count $thread $addops $removeops 0.0 $capacity 10 $dedicated 0 $delay $thread $syncinterval $scancounttuning $lockscheduling $dynamicworkamt $interval"
+                 line="$algorithm 1 non 0 non 0 non 0 $count $thread $addops $removeops 0.0 $capacity 10 $dedicated 0 $delay $thread $syncinterval $scancounttuning $lockscheduling $dynamicworkamt $interval $rltosleepidleratio"
 	else
-                 line="$algorithm 1 non 0 non 0 non 0 $count $thread $addops $removeops 0.0 $capacity 10 $dedicated 0 $delay $scancount $syncinterval $scancounttuning $lockscheduling $dynamicworkamt $interval"
+                 line="$algorithm 1 non 0 non 0 non 0 $count $thread $addops $removeops 0.0 $capacity 10 $dedicated 0 $delay $scancount $syncinterval $scancounttuning $lockscheduling $dynamicworkamt $interval $rltosleepidleratio"
 	fi
 
         for rep in $reps; do
@@ -110,4 +122,4 @@ for scancount in $scancounts; do
 		 echo "" >> $test
         done;
 
-done; done; done; done; done; done; done;
+done; done; done; done; done; done; done; done;

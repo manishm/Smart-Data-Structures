@@ -48,7 +48,7 @@ private:
 
                 static Node* get_new(final int in_num_values) {
                         final size_t new_size = (sizeof(Node) + (in_num_values + 2 - 256) * sizeof(FCIntPtr));
-
+			
                         Node* final new_node = (Node*) malloc(new_size);
                         new_node->_next = null;
                         return new_node;
@@ -83,16 +83,18 @@ private:
                 FCIntPtr volatile * deq_value_ary = _tail->_values;
                 deq_value_ary += deq_value_ary[0];
 
-                int num_added = 0;
                 int maxPasses;
                 if ( 0 == FCBase<T>::_enable_scancount_tuning )
                         maxPasses = FCBase<T>::_num_passes;
                 else {
-                        //maxPasses = Math::Max(10,1 + 2*_fc_lock->getextparam(0));
+		        //maxPasses = CCP::Math::Max(10, 1 + 2*_learner->getdiscval(0));
                         maxPasses = 1 + 2*_learner->getdiscval(0);
                         //cerr << "maxPasses = " << maxPasses << endl;
                 }
                 
+                int num_added = 0;
+		int total_changes = 0;
+
                 for (int iTry=0;iTry<maxPasses; ++iTry) {
                         //Memory::read_barrier();
 
@@ -102,8 +104,10 @@ private:
                         while(null != curr_slot->_next) {
                                 final FCIntPtr curr_value = curr_slot->_req_ans;
                                 if(curr_value > FCBase<T>::_NULL_VALUE) {
-                                        if ( 0 == _gIsDedicatedMode )
+				        if ( 0 == _gIsDedicatedMode ) {
                                                 ++num_changes;
+			                        //_hbmon->heartbeat(1);   
+					}
                                         *enq_value_ary = curr_value;
                                         ++enq_value_ary;
                                         curr_slot->_req_ans = FCBase<T>::_NULL_VALUE;
@@ -125,6 +129,7 @@ private:
                                         final FCIntPtr curr_deq = *deq_value_ary;
                                         if(0 != curr_deq) {
                                                 ++num_changes;
+			                        //_hbmon->heartbeat(1); 
                                                 curr_slot->_req_ans = -curr_deq;
                                                 curr_slot->_time_stamp = FCBase<T>::_NULL_VALUE;
                                                 ++deq_value_ary;
@@ -136,8 +141,10 @@ private:
                                                 deq_value_ary += deq_value_ary[0];
                                                 continue;
                                         } else {
-                                                if ( 0 == _gIsDedicatedMode )
+					        if ( 0 == _gIsDedicatedMode ) {
                                                         ++num_changes;
+			                                //_hbmon->heartbeat(1); 
+					        }
                                                 curr_slot->_req_ans = FCBase<T>::_NULL_VALUE;
                                                 curr_slot->_time_stamp = FCBase<T>::_NULL_VALUE;
                                         } 
@@ -147,8 +154,9 @@ private:
 
                         }//while on slots
 
-                        if ( num_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
-                                _hbmon->heartbeat(num_changes);
+			total_changes += num_changes;   
+			if ( num_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
+			        _hbmon->heartbeat(num_changes);                     
 
                 }//for repetition
 
@@ -167,6 +175,9 @@ private:
                         _head = _new_node;
                         _new_node  = null;
                 } 
+
+
+
         }
 
 public:
@@ -186,12 +197,17 @@ public:
                 _new_node = null;
 
                 int mode = LearningEngine::disabled;
-                if ( 0 != FCBase<T>::_enable_lock_scheduling ) mode |= LearningEngine::lock_scheduling;
-                if ( 0 != FCBase<T>::_enable_scancount_tuning ) mode |= LearningEngine::scancount_tuning;
-                _learner = new LearningEngine(FCBase<T>::_NUM_THREADS, hbmon, (LearningEngine::learning_mode_t) mode);
+                if ( 0   != FCBase<T>::_enable_lock_scheduling )  mode |= LearningEngine::lock_scheduling;
+                if ( 0   != FCBase<T>::_enable_scancount_tuning ) mode |= LearningEngine::scancount_tuning;
+                if ( 1.0 != FCBase<T>::_rl_to_sleepidle_ratio )   mode |= LearningEngine::inject_delay;
+
+                _learner = new LearningEngine(FCBase<T>::_NUM_THREADS, 
+                                              hbmon, 
+                                              (LearningEngine::learning_mode_t) mode, 
+                                              FCBase<T>::_rl_to_sleepidle_ratio );
+
                 _fc_lock = new SmartLockLite<FCIntPtr>(FCBase<T>::_NUM_THREADS, _learner);
                 Memory::read_write_barrier();
-
         }
 
         virtual ~SmartQueue() 

@@ -1094,6 +1094,34 @@ namespace CCP {
 				nanosleep(&delta, 0);
 			}
 
+			static _u64 difftimes(timespec start, timespec end)
+			{
+			        //input times in timespecs, get out nanos
+			        timespec temp;
+				if ((end.tv_nsec - start.tv_nsec) < 0) {
+				        temp.tv_sec = end.tv_sec - start.tv_sec - 1;
+					temp.tv_nsec = 1000000000 + end.tv_nsec - start.tv_nsec;
+				} else {
+				        temp.tv_sec = end.tv_sec-start.tv_sec;
+					temp.tv_nsec = end.tv_nsec-start.tv_nsec;
+				}
+				return ((_u64) temp.tv_sec) * 1000000000 + ((_u64) temp.tv_nsec);
+			}
+
+                        static _u64 delay(const _u64 nanos) {
+ 			        timespec start;
+                                timespec end;
+				_u64 diff;
+
+				std::cerr << "delaying" << std::endl;
+                                clock_gettime(CLOCK_REALTIME, &start);
+                                do {
+				          clock_gettime(CLOCK_REALTIME, &end);
+                                          diff = difftimes(start, end);
+				} while( diff < nanos );
+                                return diff;
+			}
+
 			static void set_concurency_level(const int num_threads) {
 				return;
 			}
@@ -1312,6 +1340,34 @@ namespace CCP {
 				delta.tv_nsec = ((millis - num_sec*1000) * 1000000) + nanos;
 				delta.tv_sec = num_sec;
 				nanosleep(&delta, 0);
+			}
+
+			static _u64 difftimes(timespec start, timespec end)
+			{
+			        //input times in timespecs, get out nanos
+			        timespec temp;
+				if ((end.tv_nsec - start.tv_nsec) < 0) {
+				        temp.tv_sec = end.tv_sec - start.tv_sec - 1;
+					temp.tv_nsec = 1000000000 + end.tv_nsec - start.tv_nsec;
+				} else {
+				        temp.tv_sec = end.tv_sec - start.tv_sec;
+					temp.tv_nsec = end.tv_nsec - start.tv_nsec;
+				}
+				return ((_u64) temp.tv_sec) * 1000000000 + ((_u64) temp.tv_nsec);
+			}
+
+                        static _u64 delay(const _u64 nanos) {
+ 			        timespec start;
+                                timespec end;
+				_u64 diff;
+
+				std::cerr << "delaying" << std::endl;
+                                clock_gettime(CLOCK_REALTIME, &start);
+                                do {
+				          clock_gettime(CLOCK_REALTIME, &end);
+                                          diff = difftimes(start, end);
+				} while( diff < nanos );
+                                return diff;
 			}
 
 			static void set_concurency_level(const int num_threads) {pthread_setconcurrency(num_threads);}

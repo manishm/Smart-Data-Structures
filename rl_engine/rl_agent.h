@@ -3,27 +3,27 @@
 #define RL_AGENT_H
 
                  
-////////////////////////////////////////////////////////////////////////////////                
-// File    : rl_agent.h                                                                 
+/////////////////////////////////////////////////////////////////////////////// 
+// File    : rl_agent.h                                                         
 // Authors : Jonathan Eastep   email: jonathan.eastep@gmail.com  
-//           David Wingate     email: wingated@mit.edu                                          
-// Written : 16 February 2011                                                                   
+//           David Wingate     email: wingated@mit.edu                          
+// Written : 16 February 2011                                                   
 //                                                         
 // Copyright (C) 2011 Jonathan Eastep, David Wingate   
-//                                                                                              
-// This program is free software; you can redistribute it and/or modify                         
-// it under the terms of the GNU General Public License as published by                         
-// the Free Software Foundation; either version 2 of the License, or                            
-// (at your option) any later version.                                                          
-//                                                                                              
-// This program is distributed in the hope that it will be useful, but                          
-// WITHOUT ANY WARRANTY; without even the implied warranty of                                   
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU                             
-// General Public License for more details.                                                     
-//                                                                                              
-// You should have received a copy of the GNU General Public License                            
-// along with this program; if not, write to the Free Software Foundation                       
-// Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA                                  
+//                                                                              
+// This program is free software; you can redistribute it and/or modify         
+// it under the terms of the GNU General Public License as published by         
+// the Free Software Foundation; either version 2 of the License, or            
+// (at your option) any later version.                                          
+//                                                                              
+// This program is distributed in the hope that it will be useful, but          
+// WITHOUT ANY WARRANTY; without even the implied warranty of                   
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU             
+// General Public License for more details.                                     
+//                                                                              
+// You should have received a copy of the GNU General Public License            
+// along with this program; if not, write to the Free Software Foundation       
+// Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA                  
 ////////////////////////////////////////////////////////////////////////////////
 
 
@@ -183,7 +183,9 @@ class rl_act_discrete : public rl_act {
     vals = _vals;
 
     stepsize = .1;
+    //stepsize = .75;
     //stepsize = .5;
+    //stepsize = 1.0;
     //stepsize = 6.0;
 
     grad.Resize( num_opts );

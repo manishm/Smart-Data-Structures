@@ -499,9 +499,11 @@ void RunBenchmark() {
 
         char _sprintf_str[1024];
         sprintf(_sprintf_str, "%f",  _gConfiguration._load_factor);
-        System_err_println("    loadFactor:        " + (std::string)(_sprintf_str));
+        System_err_println("    loadFactor:             " + (std::string)(_sprintf_str));
+        sprintf(_sprintf_str, "%f",  _gConfiguration._rl_to_sleepidle_ratio);
+        System_err_println("    rl_to_sleepidle_ratio:  " + (std::string)(_sprintf_str));
 
-        System_err_println("    initialCapacity:   " + Integer::toString(_gConfiguration._capacity));
+        System_err_println("    initialCapacity:        " + Integer::toString(_gConfiguration._capacity));
         System_err_println("");
         FCBase<FCIntPtr>::_num_post_read_write = _gConfiguration._read_write_delay;
         FCBase<FCIntPtr>::_num_passes = _gConfiguration._fc_passes;
@@ -510,6 +512,7 @@ void RunBenchmark() {
         FCBase<FCIntPtr>::_enable_lock_scheduling = _gConfiguration._lock_scheduling; 
         FCBase<FCIntPtr>::_dynamic_work_size = _gConfiguration._dynamic_work_size;
         FCBase<FCIntPtr>::_dynamic_work_intervals = _gConfiguration._dynamic_work_intervals;
+        FCBase<FCIntPtr>::_rl_to_sleepidle_ratio = _gConfiguration._rl_to_sleepidle_ratio;
 
         //create appropriate data-structure ........................................
         _num_ds=0;

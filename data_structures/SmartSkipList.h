@@ -284,9 +284,15 @@ public://methods
                         _head->_next[iLevel] = _tail;
 
                 int mode = LearningEngine::disabled;
-                if ( 0 != FCBase<T>::_enable_lock_scheduling ) mode |= LearningEngine::lock_scheduling;
-                if ( 0 != FCBase<T>::_enable_scancount_tuning ) mode |= LearningEngine::scancount_tuning;
-                _learner = new LearningEngine(FCBase<T>::_NUM_THREADS, hbmon, (LearningEngine::learning_mode_t) mode);
+                if ( 0   != FCBase<T>::_enable_lock_scheduling )  mode |= LearningEngine::lock_scheduling;
+                if ( 0   != FCBase<T>::_enable_scancount_tuning ) mode |= LearningEngine::scancount_tuning;
+                if ( 1.0 != FCBase<T>::_rl_to_sleepidle_ratio )   mode |= LearningEngine::inject_delay;
+
+                _learner = new LearningEngine(FCBase<T>::_NUM_THREADS, 
+                                              hbmon, 
+                                              (LearningEngine::learning_mode_t) mode, 
+                                              FCBase<T>::_rl_to_sleepidle_ratio );
+
                 _fc_lock = new SmartLockLite<FCIntPtr>(FCBase<T>::_NUM_THREADS, _learner);
                 Memory::read_write_barrier();
         }

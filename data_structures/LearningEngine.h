@@ -47,10 +47,13 @@ class LearningEngine
 public:
 
         enum learning_mode_t {
-                disabled = 0x0,
-                random_lock_scheduling = 0x1,
-                lock_scheduling = 0x2,
-                scancount_tuning = 0x4
+                disabled               = 0x0,
+                random_lock_scheduling = 0x1,  //if set, use a random lock scheduling policy
+                lock_scheduling        = 0x2,  //if set, use a learned lock scheduling policy
+                scancount_tuning       = 0x4,  //if set, use a learned scancount setting
+                manual_stepping        = 0x8,  //if set, no helper thread; require manual stepping
+                inject_sleep           = 0x10, //if set, inject sleep each rl step
+                inject_delay           = 0x20  //if set, inject delay time each rl step
         };
 
 private:
@@ -78,7 +81,7 @@ private:
         //reward
         double   last_checkpointed_reward   ATTRIBUTE_CACHE_ALIGNED;
         double   total_reward_ever          ATTRIBUTE_CACHE_ALIGNED; //aligned?
-        double   last_update_timestamp      ATTRIBUTE_CACHE_ALIGNED; //aligned?
+        timespec last_update_timestamp      ATTRIBUTE_CACHE_ALIGNED; //aligned?
         Monitor  *mon                       ATTRIBUTE_CACHE_ALIGNED; //aligned?
 
         //learning
@@ -89,6 +92,15 @@ private:
         int*                 ext_perm_vals  ATTRIBUTE_CACHE_ALIGNED; //aligned?
         double*              probs          ATTRIBUTE_CACHE_ALIGNED; //aligned?
         struct drand48_data  rng_state      ATTRIBUTE_CACHE_ALIGNED; //aligned?
+
+        //slowdown 
+        double               rl_to_sleepidle_ratio;
+        _u64                 time_window[8];
+        int                  time_indx;
+        _u64                 injection_nanos;
+        timespec             time1;
+        timespec             time2;
+        _u64                 time_sum;
 
         //padding
         char pad[CACHE_LINE_SIZE];
@@ -139,7 +151,7 @@ private:
                return sl;
         }
 
-        void registerLearner(learning_mode_t mode, LearningEngine *l)
+        void registerLearner(LearningEngine *l)
         {
                if (mode == disabled)
                        return; 
@@ -150,14 +162,16 @@ private:
 
                learnercount += U64(0x0001000000000001);
 
-               initrl(mode);
+               initrl();
                //CCP::Memory::read_write_barrier();
 
                if ( refcount++ == 0 )
                {
-                       pthread_attr_init(&managerthreadattr);
-                       pthread_attr_setdetachstate(&managerthreadattr, PTHREAD_CREATE_JOINABLE);
-                       pthread_create(&managerthread, &managerthreadattr, learningengine, NULL);
+                       if ( 0 == (mode & manual_stepping) ) {
+                               pthread_attr_init(&managerthreadattr);
+                               pthread_attr_setdetachstate(&managerthreadattr, PTHREAD_CREATE_JOINABLE);
+                               pthread_create(&managerthread, &managerthreadattr, learningengine, NULL);
+                       }
                }
                CCP::Memory::read_write_barrier();
                htlock = 0;
@@ -165,7 +179,7 @@ private:
                lelistAdd(l);
         }
 
-        void unregisterLearner(learning_mode_t mode, LearningEngine *l)
+        void unregisterLearner(LearningEngine *l)
         {
                if (mode == disabled)
                        return;
@@ -180,13 +194,14 @@ private:
 
                if ( --refcount == 0 )
                {
-                       FAADD(&signalquit, 1);
-                       pthread_join(managerthread, NULL);
-                       FAADD(&signalquit, -1);
-                       //deinitrl();
+                       if ( 0 == (mode & manual_stepping) ) {
+                              FAADD(&signalquit, 1);
+                              pthread_join(managerthread, NULL);
+                              FAADD(&signalquit, -1);
+                       }
                }
 
-               deinitrl(mode);
+               deinitrl();
                CCP::Memory::read_write_barrier();
                htlock = 0;
         }
@@ -206,6 +221,45 @@ private:
         //Learning engine
         //------------------------------------
 
+        void modeCheck() 
+        {
+                bool _is_disabled               = (mode == disabled);
+                bool _is_random_lock_scheduling = (mode & random_lock_scheduling);
+                bool _is_lock_scheduling        = (mode & lock_scheduling);
+                bool _is_scancount_tuning       = (mode & scancount_tuning);
+                bool _is_manual_stepping        = (mode & manual_stepping);
+                bool _is_inject_sleep           = (mode & inject_sleep);
+                bool _is_inject_delay           = (mode & inject_delay);
+
+                bool err = false;
+                err |= ( _is_random_lock_scheduling && (_is_lock_scheduling ||_is_scancount_tuning || _is_inject_sleep || _is_inject_delay ) );
+                err |= ( _is_manual_stepping && ( _is_inject_sleep || _is_inject_delay ) );
+                err |= ( _is_inject_sleep && _is_inject_delay );
+                err |= ( _is_manual_stepping && !( _is_lock_scheduling || _is_scancount_tuning || _is_random_lock_scheduling) );
+                err |= ( ( rl_to_sleepidle_ratio < .0001 ) || ( rl_to_sleepidle_ratio > 1.0 ) );
+
+                if ( err ) {
+                        cerr << "Sorry, unsupported mode: " << mode << endl;
+                        exit(0);
+                }
+        }
+
+
+        void initSlowdownMode()
+        {
+                const _u64 rlnanos = 1000;
+
+                time_sum           = 8 * rlnanos;
+                injection_nanos    = (_u64) ((((double) time_sum) / 8.) / rl_to_sleepidle_ratio);
+                time_indx          = 0;
+
+                for(int i = 0; i < 8; i++)
+                        time_window[i] = rlnanos;
+        }
+
+        void deinitSlowdownMode()
+        { }
+
         void initAPI()
         {
                 ext_disc_vals = new int[nthreads];
@@ -222,7 +276,7 @@ private:
                 delete[] ext_perm_vals;
         }
 
-        void initrl(learning_mode_t mode)
+        void initrl()
         {
                 if ( mode == disabled )
                         return;
@@ -272,7 +326,7 @@ private:
                 last_update_timestamp = rlgettime();
         }
 
-        void deinitrl(learning_mode_t mode)
+        void deinitrl()
         {
                 if ( mode == disabled )
                         return;
@@ -287,37 +341,60 @@ private:
                         rl_nac_deinit( r );
         }
    
-        double rlgettime()
+        timespec rlgettime()
         {
                 timespec ts;
                 clock_gettime( CLOCK_REALTIME, &ts );
-                return ((double)ts.tv_sec) + (((double)ts.tv_nsec) / ((double)1e9));
+                return ts;
         }
 
         double getmonitorsignal()
         {
-                return mon ? mon->getreward() : 0;  
+                return mon ? mon->getrewardlowoverhead() : 0;
         }
 
-        int getreward( double *reward ) 
+        bool getreward( double *reward ) 
         {
                 double total_reward_ever = getmonitorsignal();
                 double accumulated_heartbeats = total_reward_ever - last_checkpointed_reward;
 
                 // all of the information we need to compute a rate.
-                double tmp_time = rlgettime();
-                double time_elapsed = tmp_time - last_update_timestamp;
+                timespec tmp_time = rlgettime();
+                _u64 elapsed = CCP::Thread::difftimes(last_update_timestamp, tmp_time);
+                double time_elapsed = ((double) elapsed) / ((double) 1e9);
 
                 // originals 10, .0001
                 if ( accumulated_heartbeats > 10 || time_elapsed > 0.0001 ) {
                         last_update_timestamp = tmp_time;
-                        *reward = accumulated_heartbeats / time_elapsed;
-                        //cout << "using " << accumulated_heartbeats << " beats" << endl;
+                        double r = accumulated_heartbeats / time_elapsed;
+                        *reward = r;
+                        //cerr << "reward= " << r << endl;
                         last_checkpointed_reward = total_reward_ever;
-                        return 1;
+                        return true;
                 }
                 
-                return 0;
+                return false;
+        }
+
+        void slowdown_part1()
+        {
+                if ( mode & inject_sleep )
+                        CCP::Thread::sleep(0, injection_nanos);
+                else if ( mode & inject_delay ) {
+ 		        CCP::Thread::delay(injection_nanos);
+                }
+                time1 = rlgettime();
+        }
+
+        void slowdown_part2()
+        {
+                time2 = rlgettime();
+                _u64 delta = CCP::Thread::difftimes(time1,time2);
+                time_sum = time_sum - time_window[time_indx] + delta;
+                time_window[time_indx] = delta;
+                time_indx = (time_indx + 1) % 8;
+                double avg = ((double) time_sum) / 8.;
+                injection_nanos = (_u64) (avg / rl_to_sleepidle_ratio);
         }
 
         void rlupdate() 
@@ -332,14 +409,11 @@ private:
 
                 do
                 {
+                        if ( mode & (inject_sleep | inject_delay) )
+                                slowdown_part1();
+
                         double reward;
-                        if ( !getreward( &reward ) )
-                        {
-                                status = learnercount;
-                                num_live = (status >> 48);
-                                seq_no = (status & U64(0xFFFFFFFFFFFF));
-                        }
-                        else
+                        if ( getreward( &reward ) )
                         {
                                 rl_nac_action_sample( r );
 
@@ -347,18 +421,22 @@ private:
                                 memcpy(ext_disc_vals, disc_vals, nthreads*sizeof(int));
                                 for(int i = 0; i < nthreads; ++i)
                                         ext_perm_vals[i] = clippriority(nthreads - 1 - perm_vals[i]);
+                                //cerr << "scancount = " << disc_vals[0] << endl;
 
                                 double statefeats[] = {1.};
                                 rl_nac_update( r, reward, statefeats );
-
-                                status = learnercount;
-                                num_live = (status >> 48);
-                                seq_no = (status & U64(0xFFFFFFFFFFFF));
                         }
+
+                        if ( mode & (inject_sleep | inject_delay) )
+                                slowdown_part2();
 
                         //cerr << "looping in rlupdate." << endl;
 
-                } while( (num_live == 1) && (seq_no == start_seq_no) );
+                        status = learnercount;
+                        num_live = (status >> 48);
+                        seq_no = (status & U64(0xFFFFFFFFFFFF));
+
+                } while( (0 == (mode & manual_stepping)) && (num_live == 1) && (seq_no == start_seq_no) );
 
                 CCP::Memory::read_write_barrier();
 
@@ -417,19 +495,23 @@ private:
         //Interface
         //---------------------
 
-        LearningEngine(unsigned int threads, Monitor *m, learning_mode_t mode = disabled)
+        LearningEngine(unsigned int threads, Monitor *m, learning_mode_t mode = disabled, double rlfactor = 1.0)
         :  nthreads(threads), 
            mon(m), 
-           mode(mode)
+           mode(mode),
+           rl_to_sleepidle_ratio(rlfactor)
         {
+                modeCheck();
+                initSlowdownMode();
                 initAPI();
-                registerLearner(mode, this);
+                registerLearner(this);
         }
 
         ~LearningEngine() 
         {
-                unregisterLearner(mode, this);
+                unregisterLearner(this);
                 deinitAPI();
+                deinitSlowdownMode();
         }
 
         inline int getdiscval(unsigned int id = 0)
