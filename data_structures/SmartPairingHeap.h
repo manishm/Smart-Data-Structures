@@ -54,6 +54,7 @@ private:
         char                      _pad3[CACHE_LINE_SIZE];
         Hb*                       _hbmon;
         LearningEngine*           _learner;
+        int                       _sc_tune_id;
 
         //helper function -----------------------------
         inline_ void flat_combining(final int iThread) {
@@ -62,7 +63,7 @@ private:
                 if ( 0 == FCBase<T>::_enable_scancount_tuning )
                         maxPasses = FCBase<T>::_num_passes;
                 else
-                        maxPasses = 1 + 2*_learner->getdiscval(0);
+		        maxPasses = 1 + 2*_learner->getdiscval(_sc_tune_id, iThread);
 
                 int total_changes = 0;
                 for (int iTry=0;iTry<maxPasses; ++iTry) {
@@ -99,20 +100,15 @@ private:
         
 public:
 
-        SmartPairHeap(Hb* hbmon)
+        SmartPairHeap(Hb* hbmon, LearningEngine* learner)
         :       _NUM_REP(FCBase<T>::_NUM_THREADS),
                 _REP_THRESHOLD((int)(Math::ceil(FCBase<T>::_NUM_THREADS/(1.7)))),
-                _hbmon(hbmon)
+	        _hbmon(hbmon),
+	        _learner(learner)
         {
-                int mode = LearningEngine::disabled;
-                if ( 0   != FCBase<T>::_enable_lock_scheduling )  mode |= LearningEngine::lock_scheduling;
-                if ( 0   != FCBase<T>::_enable_scancount_tuning ) mode |= LearningEngine::scancount_tuning;
-                if ( 1.0 != FCBase<T>::_rl_to_sleepidle_ratio )   mode |= LearningEngine::inject_delay;
-
-                _learner = new LearningEngine(FCBase<T>::_NUM_THREADS, 
-                                              hbmon, 
-                                              (LearningEngine::learning_mode_t) mode, 
-                                              FCBase<T>::_rl_to_sleepidle_ratio );
+                _sc_tune_id = 0;
+                if ( 0 != FCBase<T>::_enable_scancount_tuning )
+                        _sc_tune_id = _learner->register_sc_tune_id();
 
                 _fc_lock = new SmartLockLite<FCIntPtr>(FCBase<T>::_NUM_THREADS, _learner);
                 Memory::read_write_barrier();
@@ -121,7 +117,6 @@ public:
         virtual ~SmartPairHeap() 
         {
                 delete _fc_lock;
-                delete _learner;
         }
 
         //enq ......................................................

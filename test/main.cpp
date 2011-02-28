@@ -120,7 +120,7 @@ void RunBenchmark();
 void PrepareActions();
 void PrepareRandomNumbers(final int size);
 int NearestPowerOfTwo(final int x);
-FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name);
+FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* learner);
 
 ////////////////////////////////////////////////////////////////////////////////
 //TYPEDEFS
@@ -234,9 +234,11 @@ public:
 
                 PtrNode<FCIntPtr>* n = new FCIntPtrNode(0);
 
+                int iDb = _threadNo % _num_ds;
+
                 for (int iDb=0; iDb<_num_ds; ++iDb) {
                         _gDS[iDb]->cas_reset(_threadNo);
-                }
+		}
 
                 //save start benchmark time ............................................
                 final int start_counter = _gThreadStartCounter.getAndIncrement();
@@ -252,13 +254,13 @@ public:
                 int iOp = start_counter*128;
                 do {
 
-                        for (int iDb=0; iDb<_num_ds; ++iDb) {
+		        //for (int iDb=0; iDb<_num_ds; ++iDb) {
                                 *n = FCIntPtrNode( _gRandNumAry[iNumAdd] );
                                 final int enq_value = _gDS[iDb]->add(_threadNo, n);
                                 ++iNumAdd;
                                 if(iNumAdd >= _gTotalRandNum)
                                 iNumAdd=0;
-                        }
+			//}
                         ++action_counter;
                         //_hbmon->heartbeat();
 
@@ -295,9 +297,11 @@ public:
 
         void run() {
 
+	        int iDb = _threadNo % _num_ds;
+
                 for (int iDb=0; iDb<_num_ds; ++iDb) {
                         _gDS[iDb]->cas_reset(_threadNo);
-                }
+		}
 
                 //save start benchmark time ............................................
                 final int start_counter = _gThreadStartCounter.getAndIncrement();
@@ -311,12 +315,13 @@ public:
                 int iNumRemove = start_counter*1024;
                 int iNumContain = start_counter*1024;
                 int iOp = start_counter*128;
+
                 do {
-                        for (int iDb=0; iDb<_num_ds; ++iDb) {
+		        //for (int iDb=0; iDb<_num_ds; ++iDb) {
                                 while ( (0 == _gIsStopThreads) && (0 == _gDS[iDb]->remove(_threadNo, NULL)) );  
                                 ++iNumRemove;
                                 if(iNumRemove >= _gTotalRandNum) { iNumRemove=0; }
-                        }
+			//}
                         ++action_counter;
                         //_hbmon->heartbeat();
 
@@ -352,9 +357,11 @@ public:
 
                 PtrNode<FCIntPtr>* n = new FCIntPtrNode(0);
 
+                int iDb = _threadNo % _num_ds;
+
                 for (int iDb=0; iDb<_num_ds; ++iDb) {
                         _gDS[iDb]->cas_reset(_threadNo);
-                }
+		}
 
                 //save start benchmark time ............................................
                 final int start_counter = _gThreadStartCounter.getAndIncrement();
@@ -369,12 +376,12 @@ public:
                 int iNumContain = start_counter*1024;
                 int iOp = start_counter*128;
                 do {
-                        for (int iDb=0; iDb<_num_ds; ++iDb) {
+		        //for (int iDb=0; iDb<_num_ds; ++iDb) {
                                 *n = FCIntPtrNode( _gRandNumAry[iNumContain] );
                                 _gDS[iDb]->contain(_threadNo, n);
                                 ++iNumContain;
                                 if(iNumContain >= _gTotalRandNum) {     iNumContain=0; }
-                        }
+		        //}
                         ++action_counter;
                         //_hbmon->heartbeat();
 
@@ -455,7 +462,8 @@ int main(int argc, char **argv) {
                 delete _gDS[iDb]; 
                 _gDS[iDb] = null;
         }
-	delete _hbmon;
+        //can't do this unless we delete all learning engines too else le tries to read from mon after deleted segfault
+	//delete _hbmon;
 
 }
 
@@ -512,42 +520,87 @@ void RunBenchmark() {
         FCBase<FCIntPtr>::_enable_lock_scheduling = _gConfiguration._lock_scheduling; 
         FCBase<FCIntPtr>::_dynamic_work_size = _gConfiguration._dynamic_work_size;
         FCBase<FCIntPtr>::_dynamic_work_intervals = _gConfiguration._dynamic_work_intervals;
-        FCBase<FCIntPtr>::_rl_to_sleepidle_ratio = _gConfiguration._rl_to_sleepidle_ratio;
 
         //create appropriate data-structure ........................................
+	LearningEngine *learner;
         _num_ds=0;
+
+        int mode = LearningEngine::disabled;
+        int num_lock_sched = 0;
+        int num_sc_tune = 0;
+        if ( 0   != _gConfiguration._lock_scheduling )  { mode |= LearningEngine::lock_scheduling;  num_lock_sched = 1; }
+        if ( 0   != _gConfiguration._scancount_tuning ) { mode |= LearningEngine::scancount_tuning; num_sc_tune    = 1; }
+        if ( 1.0 != _gConfiguration._rl_to_sleepidle_ratio )   { mode |= LearningEngine::inject_delay; }
+
+
+	if ( 0 == strncmp(_gConfiguration._alg1_name, "smart", 5) )
+                learner = new LearningEngine(_gNumThreads, _hbmon, _gConfiguration._rl_to_sleepidle_ratio,
+					     (LearningEngine::learning_mode_t) mode, 
+                                             num_lock_sched*_gConfiguration._alg1_num, num_sc_tune*_gConfiguration._alg1_num );
+	else
+	        learner = null;
+
         for (int i=0; i<(_gConfiguration._alg1_num); ++i) {
-                FCBase<FCIntPtr>* tmp = CreateDataStructure(_gConfiguration._alg1_name);
+	        FCBase<FCIntPtr>* tmp = CreateDataStructure(_gConfiguration._alg1_name, learner);
                 if ( tmp == null ) {
                    System_err_println("Invalid data structure type requested: " + std::string(_gConfiguration._alg1_name));
                    exit(0);
                 }
                 _gDS[_num_ds++] = tmp;
         }
+
+
+	if ( 0 == strncmp(_gConfiguration._alg2_name, "smart", 5) )
+                learner = new LearningEngine(_gNumThreads, _hbmon, _gConfiguration._rl_to_sleepidle_ratio,
+					     (LearningEngine::learning_mode_t) mode, 
+                                             num_lock_sched*_gConfiguration._alg2_num, num_sc_tune*_gConfiguration._alg2_num );
+	else
+	        learner = null;
+
+
         for (int i=0; i<(_gConfiguration._alg2_num); ++i) {
-                FCBase<FCIntPtr>* tmp = CreateDataStructure(_gConfiguration._alg2_name);
+	        FCBase<FCIntPtr>* tmp = CreateDataStructure(_gConfiguration._alg2_name, learner);
                 if ( tmp == null ) {
                    System_err_println("Invalid data structure type requested: " + std::string(_gConfiguration._alg2_name));
                    exit(0);
                 }
                 _gDS[_num_ds++] = tmp;
         }
+
+
+	if ( 0 == strncmp(_gConfiguration._alg3_name, "smart", 5) )
+                learner = new LearningEngine(_gNumThreads, _hbmon, _gConfiguration._rl_to_sleepidle_ratio,
+					     (LearningEngine::learning_mode_t) mode, 
+                                             num_lock_sched*_gConfiguration._alg3_num, num_sc_tune*_gConfiguration._alg3_num );
+	else
+	        learner = null;
+
         for (int i=0; i<(_gConfiguration._alg3_num); ++i) {
-                FCBase<FCIntPtr>* tmp = CreateDataStructure(_gConfiguration._alg3_name);
+	        FCBase<FCIntPtr>* tmp = CreateDataStructure(_gConfiguration._alg3_name, learner);
                 if ( tmp == null ) {
                    System_err_println("Invalid data structure type requested: " + std::string(_gConfiguration._alg3_name));
                    exit(0);
                 }
                 _gDS[_num_ds++] = tmp;
         }
+
+
+	if ( 0 == strncmp(_gConfiguration._alg4_name, "smart", 5) )
+                learner = new LearningEngine(_gNumThreads, _hbmon, _gConfiguration._rl_to_sleepidle_ratio,
+					     (LearningEngine::learning_mode_t) mode, 
+                                             num_lock_sched*_gConfiguration._alg4_num, num_sc_tune*_gConfiguration._alg4_num );
+	else
+	        learner = null;
+
         for (int i=0; i<(_gConfiguration._alg4_num); ++i) {
-                FCBase<FCIntPtr>* tmp = CreateDataStructure(_gConfiguration._alg4_name);
+	        FCBase<FCIntPtr>* tmp = CreateDataStructure(_gConfiguration._alg4_name, learner);
                 if ( tmp == null ) {
                    System_err_println("Invalid data structure type requested: " + std::string(_gConfiguration._alg4_name));
                    exit(0);
                 }
                 _gDS[_num_ds++] = tmp;
         }
+
 
         //install work amount
         if ( 0 != FCBase<FCIntPtr>::_dynamic_work_size )
@@ -677,14 +730,14 @@ void RunBenchmark() {
         _gResultPeek     /= (long)(_gEndTime - _gStartTime);
 }
 
-FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name) {
+FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* learner) {
 
         //queue ....................................................................
         if(0 == strcmp(alg_name, "fcqueue")) {
                 return (new FCQueue<FCIntPtr>());
         }
         if(0 == strcmp(alg_name, "smartqueue")) {
-                return (new SmartQueue<FCIntPtr>(_hbmon));
+                return (new SmartQueue<FCIntPtr>(_hbmon, learner));
         }
         if(0 == strcmp(alg_name, "msqueue")) {
                 return (new MSQueue<FCIntPtr>());
@@ -709,7 +762,7 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name) {
                 return (new FCSkipList<FCIntPtr>());
         }
         if(0 == strcmp(alg_name, "smartskiplist")) {
-                return (new SmartSkipList<FCIntPtr>(_hbmon));
+                return (new SmartSkipList<FCIntPtr>(_hbmon, learner));
         }
         if(0 == strcmp(alg_name, "lfskiplist")) {
                 return (new LFSkipList<FCIntPtr>());
@@ -723,7 +776,7 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name) {
                 return (new FCPairHeap<FCIntPtr>());
         }
         if(0 == strcmp(alg_name, "smartpairheap")) {
-                return (new SmartPairHeap<FCIntPtr>(_hbmon));
+                return (new SmartPairHeap<FCIntPtr>(_hbmon, learner));
         }
 
         //stack ....................................................................

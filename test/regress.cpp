@@ -303,7 +303,7 @@ bool serial_test(FCBase<FCIntPtr>* queue, TESTTYPE type)
 	return rv;
 }
 
-bool destruct_test(FCBase<lli>** ds1, FCBase<lli>** ds2, int num_ds, Hb* hbmon)
+bool destruct_test(FCBase<lli>** ds1, FCBase<lli>** ds2, int num_ds, Hb* hbmon, LearningEngine** learner)
 {
         bool rv = true;
         try {
@@ -311,7 +311,9 @@ bool destruct_test(FCBase<lli>** ds1, FCBase<lli>** ds2, int num_ds, Hb* hbmon)
                 for(int i = 0; i < num_ds; i++) {
                         delete ds1[i];
                         delete ds2[i];
+			delete learner[i];
                 }
+		delete[] learner;
 		delete hbmon;
         }
         catch(...) {
@@ -324,22 +326,36 @@ bool destruct_test(FCBase<lli>** ds1, FCBase<lli>** ds2, int num_ds, Hb* hbmon)
 
 int main(int argc, char* argv[])
 {
-
+        const int             NUMDS = 16;
+        LearningEngine**      learner = new LearningEngine*[NUMDS];
         Hb*                   hbmon = new Hb();
 
-        const int             NUMDS = 16;
 
-        FCBase<lli>* ds1[NUMDS] = { new FCQueue<lli>(), new SmartQueue<lli>(hbmon), new MSQueue<lli>(), new BasketsQueue<lli>(),
+        int mode = LearningEngine::scancount_tuning;
+        double rl_to_sleepidle_ratio = 1.0;
+        int num_lock_sched = 0;
+        int num_sc_tune = 1;
+	for (int i = 0; i < NUMDS; i++) {
+	        learner[i] =  new LearningEngine(_gNumThreads, 
+						 hbmon, 
+						 rl_to_sleepidle_ratio,
+						 (LearningEngine::learning_mode_t) mode,
+						 num_lock_sched,
+						 num_sc_tune
+						 );
+	}
+
+	FCBase<lli>* ds1[NUMDS] = { new FCQueue<lli>(), new SmartQueue<lli>(hbmon, learner[0]), new MSQueue<lli>(), new BasketsQueue<lli>(),
                                     null /*new ComTreeQueue<lli>()*/, new OyamaQueue<lli>(), null /*new OyamaQueueCom<lli>()*/,
-                                    new FCSkipList<lli>(), new SmartSkipList<lli>(hbmon), new LFSkipList<lli>(),
-                                    new LazySkipList<lli>(), new FCPairHeap<lli>(), new SmartPairHeap<lli>(hbmon),
+				    new FCSkipList<lli>(), new SmartSkipList<lli>(hbmon, learner[1]), new LFSkipList<lli>(),
+				    new LazySkipList<lli>(), new FCPairHeap<lli>(), new SmartPairHeap<lli>(hbmon, learner[2]),
                                     new FCStack<lli>(), new LFStack<lli>(), new EliminationStack<lli>() };
 
 #ifdef QUEUE2
-        FCBase<lli>* ds2[NUMDS] = { new FCQueue<lli>(), new SmartQueue<lli>(hbmon), new MSQueue<lli>(), new BasketsQueue<lli>(),
+        FCBase<lli>* ds2[NUMDS] = { new FCQueue<lli>(), new SmartQueue<lli>(hbmon, learner[3]), new MSQueue<lli>(), new BasketsQueue<lli>(),
                                     null /*new ComTreeQueue<lli>()*/, new OyamaQueue<lli>(), null /*new OyamaQueueCom<lli>()*/,
-                                    new FCSkipList<lli>(), new SmartSkipList<lli>(hbmon), new LFSkipList<lli>(),
-                                    new LazySkipList<lli>(), new FCPairHeap<lli>(), new SmartPairHeap<lli>(hbmon),
+                                    new FCSkipList<lli>(), new SmartSkipList<lli>(hbmon, learner[4]), new LFSkipList<lli>(),
+                                    new LazySkipList<lli>(), new FCPairHeap<lli>(), new SmartPairHeap<lli>(hbmon, learner[5]),
                                     new FCStack<lli>(), new LFStack<lli>(), new EliminationStack<lli>() };
 #else
         FCBase<lli>* ds2[NUMDS] = {null};
@@ -389,7 +405,7 @@ int main(int argc, char* argv[])
                 megatotal &= ptotal;
         }
 
-        bool rv = destruct_test(ds1, ds2, NUMDS, hbmon);
+        bool rv = destruct_test(ds1, ds2, NUMDS, hbmon, learner);
         megafails += rv ? 0 : 1;
         megatotal &= rv;
 

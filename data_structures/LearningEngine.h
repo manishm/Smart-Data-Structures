@@ -85,6 +85,10 @@ private:
         Monitor  *mon                       ATTRIBUTE_CACHE_ALIGNED; //aligned?
 
         //learning
+        int                  num_lock_sched ATTRIBUTE_CACHE_ALIGNED;
+        int                  num_sc_tune;
+        volatile int         lock_sched_id  ATTRIBUTE_CACHE_ALIGNED;
+        volatile int         sc_tune_id     ATTRIBUTE_CACHE_ALIGNED;
         rl_nac_t             r              ATTRIBUTE_CACHE_ALIGNED;
         int*                 perm_vals      ATTRIBUTE_CACHE_ALIGNED; //aligned?
         int*                 disc_vals      ATTRIBUTE_CACHE_ALIGNED; //aligned?
@@ -237,6 +241,8 @@ private:
                 err |= ( _is_inject_sleep && _is_inject_delay );
                 err |= ( _is_manual_stepping && !( _is_lock_scheduling || _is_scancount_tuning || _is_random_lock_scheduling) );
                 err |= ( ( rl_to_sleepidle_ratio < .0001 ) || ( rl_to_sleepidle_ratio > 1.0 ) );
+                err |= ( _is_lock_scheduling && (num_lock_sched < 1) );
+                err |= ( _is_scancount_tuning && (num_sc_tune < 1) );
 
                 if ( err ) {
                         cerr << "Sorry, unsupported mode: " << mode << endl;
@@ -262,17 +268,30 @@ private:
 
         void initAPI()
         {
-                ext_disc_vals = new int[nthreads];
+                //FIXME: the other cases aren't handled yet
+                assert( (num_lock_sched == 0) || (num_lock_sched == 1) );
+                perm_vals = new int[nthreads];
                 ext_perm_vals = new int[nthreads];
                 for (int i = 0; i<nthreads; ++i) {
+                        int p = clippriority( nthreads - 1 - i );
+                        perm_vals[i] = p;
+                        ext_perm_vals[i] = p;
+                }
+
+                assert( num_sc_tune >= 0 );
+                disc_vals = new int[num_sc_tune];
+                ext_disc_vals = new int[num_sc_tune];
+                for (int i = 0; i<num_sc_tune; ++i) {
+                        disc_vals[i] = nthreads;
                         ext_disc_vals[i] = nthreads;
-                        ext_perm_vals[i] = clippriority( nthreads - 1 - i );
                 }
         }
 
         void deinitAPI()
         {
+                delete[] disc_vals;
                 delete[] ext_disc_vals;
+                delete[] perm_vals;
                 delete[] ext_perm_vals;
         }
 
@@ -281,12 +300,10 @@ private:
                 if ( mode == disabled )
                         return;
 
-                //cerr << "In initrl with mode=" << mode << endl;
-
                 probs = new double[nthreads];
                 srand48_r( 42, &rng_state );
-                perm_vals = new int[nthreads];
-                disc_vals = new int[nthreads];
+
+                //cerr << "In initrl with mode=" << mode << endl;
 
                 if ( (mode & lock_scheduling) && (mode & scancount_tuning) )
                 {
@@ -294,8 +311,9 @@ private:
                         //nthreads perm vals, 1 discrete (range 0 to 12)
                         rl_act_entry_t raes[] = 
                           {{ RLA_PERM, 0, 0, perm_vals },
-                           { RLA_DISCRETE, 1, 13, disc_vals }};
+                           { RLA_DISCRETE, 0, 13, disc_vals }};
                         raes[0].first_param = nthreads;
+                        raes[1].first_param = num_sc_tune;
                         rl_act_desc_t rad = { 2, raes };
 
                         r = rl_nac_init( 1, &rad );
@@ -304,7 +322,8 @@ private:
                         //cerr << "Configuring ml for external discrete" << endl;
                         //0 perm vals, 1 discrete (range 0 to 12)
                         rl_act_entry_t raes[] = 
-                          {{ RLA_DISCRETE, 1, 13, disc_vals }};
+                          {{ RLA_DISCRETE, 0, 13, disc_vals }};
+                        raes[0].first_param = num_sc_tune;
                         rl_act_desc_t rad = { 1, raes };
 
                         r = rl_nac_init( 1, &rad );
@@ -334,8 +353,6 @@ private:
                 //cerr << "In deinitrl mode=" << mode << endl;
 
                 delete[] probs;
-                delete[] perm_vals;
-                delete[] disc_vals;
 
                 if ( mode & (lock_scheduling | scancount_tuning) )
                         rl_nac_deinit( r );
@@ -378,10 +395,11 @@ private:
 
         void slowdown_part1()
         {
+                //cerr << "injection_nanos= " << injection_nanos << endl;
                 if ( mode & inject_sleep )
                         CCP::Thread::sleep(0, injection_nanos);
                 else if ( mode & inject_delay ) {
- 		        CCP::Thread::delay(injection_nanos);
+                        CCP::Thread::delay(injection_nanos);
                 }
                 time1 = rlgettime();
         }
@@ -418,7 +436,7 @@ private:
                                 rl_nac_action_sample( r );
 
                                 //output the vals
-                                memcpy(ext_disc_vals, disc_vals, nthreads*sizeof(int));
+                                memcpy(ext_disc_vals, disc_vals, num_sc_tune*sizeof(int));
                                 for(int i = 0; i < nthreads; ++i)
                                         ext_perm_vals[i] = clippriority(nthreads - 1 - perm_vals[i]);
                                 //cerr << "scancount = " << disc_vals[0] << endl;
@@ -495,12 +513,18 @@ private:
         //Interface
         //---------------------
 
-        LearningEngine(unsigned int threads, Monitor *m, learning_mode_t mode = disabled, double rlfactor = 1.0)
+         LearningEngine(unsigned int threads, Monitor *m, double rlfactor = 1.0, 
+                        learning_mode_t mode = disabled, int num_lock_scheduling = 0, int num_scancount_tuning = 0 )
         :  nthreads(threads), 
            mon(m), 
            mode(mode),
-           rl_to_sleepidle_ratio(rlfactor)
+           rl_to_sleepidle_ratio(rlfactor),
+           num_lock_sched(num_lock_scheduling),
+           num_sc_tune(num_scancount_tuning),
+           lock_sched_id(0),
+           sc_tune_id(0)
         {
+	        //cerr << "instantiated a learner. num_sc_tune= " << num_sc_tune << endl;
                 modeCheck();
                 initSlowdownMode();
                 initAPI();
@@ -514,14 +538,28 @@ private:
                 deinitSlowdownMode();
         }
 
-        inline int getdiscval(unsigned int id = 0)
+        inline int register_lock_sched_id()
+	{ 
+	        //FIXME: other cases aren't handled yet
+	        assert( num_lock_sched == 1 ); 
+                return 0;
+	}
+
+        inline int register_sc_tune_id()
+	{
+                int id = FAADD(&sc_tune_id, 1);
+		return id;
+	}
+
+        inline int getdiscval(unsigned int sc_tune_id, unsigned int tid)
         {
-                return ext_disc_vals[id];
+                return ext_disc_vals[sc_tune_id];
         }
 
-        inline int getpermval(unsigned int id)
+        inline int getpermval(unsigned int lock_sched_id, unsigned int tid)
         {
-                return ext_perm_vals[id];
+	        //FIXME. this will need to change when we support > 1 perm obj
+                return ext_perm_vals[tid];
         }
 
         inline learning_mode_t getmode()

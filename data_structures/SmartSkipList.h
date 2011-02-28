@@ -87,6 +87,7 @@ protected://Flat Combining fields
         Node*                      _saved_node_ptr[1024];
         Hb*                        _hbmon;
         LearningEngine*            _learner;
+        int                        _sc_tune_id;
 
 protected://methods
         inline_ int randomLevel() {
@@ -145,7 +146,7 @@ protected://methods
                 if ( 0 == FCBase<T>::_enable_scancount_tuning )
                         maxPasses = FCBase<T>::_num_passes;
                 else
-                        maxPasses = 1 + 2*_learner->getdiscval(0);
+		        maxPasses = 1 + 2*_learner->getdiscval(_sc_tune_id, iThread);
                 
                 int num_changes = 0;
                 for (int iTry=0;iTry<maxPasses; ++iTry) {
@@ -272,26 +273,21 @@ protected://methods
 
 public://methods
 
-        SmartSkipList(Hb* hbmon)
+        SmartSkipList(Hb* hbmon, LearningEngine* learner)
         : _head( Node::getNewNode(new PtrNode<T>(FCBase<T>::_MIN_INT, null)) ),
           _tail( Node::getNewNode(new PtrNode<T>(FCBase<T>::_MAX_INT, null)) ),
           _NUM_REP( Math::Min(2, FCBase<T>::_NUM_THREADS)),
           _REP_THRESHOLD((int)(Math::ceil(FCBase<T>::_NUM_THREADS/(1.7)))),
-          _hbmon(hbmon)
+          _hbmon(hbmon),
+          _learner(learner)
         {
                 //initialize head to point to tail .....................................
                 for (int iLevel = 0; iLevel < _head->_top_level; ++iLevel)
                         _head->_next[iLevel] = _tail;
 
-                int mode = LearningEngine::disabled;
-                if ( 0   != FCBase<T>::_enable_lock_scheduling )  mode |= LearningEngine::lock_scheduling;
-                if ( 0   != FCBase<T>::_enable_scancount_tuning ) mode |= LearningEngine::scancount_tuning;
-                if ( 1.0 != FCBase<T>::_rl_to_sleepidle_ratio )   mode |= LearningEngine::inject_delay;
-
-                _learner = new LearningEngine(FCBase<T>::_NUM_THREADS, 
-                                              hbmon, 
-                                              (LearningEngine::learning_mode_t) mode, 
-                                              FCBase<T>::_rl_to_sleepidle_ratio );
+                _sc_tune_id = 0;
+                if ( 0 != FCBase<T>::_enable_scancount_tuning )
+                        _sc_tune_id = _learner->register_sc_tune_id();
 
                 _fc_lock = new SmartLockLite<FCIntPtr>(FCBase<T>::_NUM_THREADS, _learner);
                 Memory::read_write_barrier();
@@ -300,7 +296,6 @@ public://methods
         virtual ~SmartSkipList() 
         {
                 delete _fc_lock;
-                delete _learner;
         }
 
 public://methods

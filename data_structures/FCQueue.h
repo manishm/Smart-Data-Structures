@@ -182,8 +182,8 @@ public:
                 if(null == my_slot)
                         my_slot = FCBase<T>::get_new_slot();
 
-                SlotInfo* volatile&     my_next = my_slot->_next;
-                FCIntPtr volatile* my_re_ans = &my_slot->_req_ans;
+                SlotInfo* volatile&  my_next   = my_slot->_next;
+                FCIntPtr volatile*   my_re_ans = &my_slot->_req_ans;
                 *my_re_ans = inValue;
 
                 do {

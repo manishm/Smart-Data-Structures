@@ -31,4 +31,4 @@ template<> int          FCBase<FCIntPtr>::_enable_scancount_tuning = 1;
 template<> int          FCBase<FCIntPtr>::_enable_lock_scheduling = 0;
 template<> int          FCBase<FCIntPtr>::_dynamic_work_size = 0;
 template<> int          FCBase<FCIntPtr>::_dynamic_work_intervals = 0;
-template<> double       FCBase<FCIntPtr>::_rl_to_sleepidle_ratio = 1.0;
+

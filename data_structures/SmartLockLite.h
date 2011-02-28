@@ -55,7 +55,7 @@ private:
 
         template<typename T> friend class SmartLockLiteNode;
 
-        volatile _u64 fastprlock ATTRIBUTE_CACHE_ALIGNED;  
+        volatile _u64 fastprlock             ATTRIBUTE_CACHE_ALIGNED;  
         char          pad[CACHE_LINE_SIZE];
 
 public:
@@ -78,7 +78,8 @@ class SmartLockLiteNode
 {
 private:
 
-        volatile _u64 *fastprlock ATTRIBUTE_CACHE_ALIGNED;
+        int            lock_sched_id ATTRIBUTE_CACHE_ALIGNED;
+        volatile _u64* fastprlock    ATTRIBUTE_CACHE_ALIGNED;
 
 #ifdef CASSTATS
         unsigned int casops ATTRIBUTE_CACHE_ALIGNED;
@@ -102,6 +103,7 @@ public:
         SmartLockLiteNode()
         {
                 // This constructor will intentionally cause a segfault in your application if object is used
+	        lock_sched_id = 0;
                 fastprlock = NULL;
                 id = 0;
                 learner = NULL;
@@ -116,12 +118,13 @@ public:
                 alg = PRLOCK;
         }   
 
-        SmartLockLiteNode(SmartLockLiteState *s, algorithm_t a, LearningEngine *le, int i)
+        SmartLockLiteNode(SmartLockLiteState *s, algorithm_t a, LearningEngine *le, int lsid, int i)
         {
+	        lock_sched_id = lsid;
                 fastprlock = &s->fastprlock;
                 id = i;
                 learner = le;
-                pri = learner->getpermval(id);
+                pri = learner->getpermval(lsid, id);
                 alg = a;
                 
                 CCP::Memory::read_write_barrier();
@@ -199,7 +202,7 @@ public:
         //must play nicely with trylock_*
         bool trylock_pr(volatile T *ptr, T val) //__attribute__ ((noinline))
         {
-                _u64 mypri = learner->getpermval(id);
+	        _u64 mypri = learner->getpermval(lock_sched_id, id);
                 _u64 lockbit = (U64(1) << 63);
                 _u64 ormask = (U64(1) << mypri);
                 _u64 ormmooorm = ormask | (ormask-1);
@@ -245,7 +248,7 @@ public:
                         }
 
                         _u64 tmp;
-                        if ( (tmp=learner->getpermval(id)) != mypri ) {
+                        if ( (tmp=learner->getpermval(lock_sched_id, id)) != mypri ) {
                                 if ( needclear ) {
                                         FAAND(fastprlock, ~ormask);
                                         needclear = false;
@@ -297,9 +300,6 @@ public:
 };
 
 
-// SmartLock wrapper functions
-
-static void* learningengine(void *);
 
 template <typename T = int>
 class SmartLockLite
@@ -324,8 +324,12 @@ public:
                      SmartLockLiteNode<T>::PRLOCK : 
                      SmartLockLiteNode<T>::TTAS);
 
+                int lsid = 0;
+                if ( mode & LearningEngine::lock_scheduling )
+                        lsid = le->register_lock_sched_id();
+
                 for(int i = 0; i < threads; i++) {
-                        slnodes[i] = SmartLockLiteNode<T>(&state, a, le, i);
+		        slnodes[i] = SmartLockLiteNode<T>(&state, a, le, lsid, i);
                 }
                 CCP::Memory::read_write_barrier();
         }

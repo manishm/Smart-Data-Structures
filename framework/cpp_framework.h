@@ -1113,7 +1113,7 @@ namespace CCP {
                                 timespec end;
 				_u64 diff;
 
-				std::cerr << "delaying" << std::endl;
+				//std::cerr << "delaying" << std::endl;
                                 clock_gettime(CLOCK_REALTIME, &start);
                                 do {
 				          clock_gettime(CLOCK_REALTIME, &end);
@@ -1361,7 +1361,7 @@ namespace CCP {
                                 timespec end;
 				_u64 diff;
 
-				std::cerr << "delaying" << std::endl;
+				//std::cerr << "delaying" << std::endl;
                                 clock_gettime(CLOCK_REALTIME, &start);
                                 do {
 				          clock_gettime(CLOCK_REALTIME, &end);
