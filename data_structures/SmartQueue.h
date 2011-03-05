@@ -31,6 +31,7 @@
 #include "LearningEngine.h"
 #include "SmartLockLite.h"
 #include "Heartbeat.h"
+#include "Monitor.h"
 
 
 using namespace CCP;
@@ -64,7 +65,7 @@ private:
         Node* volatile            _tail;
         int volatile              _NODE_SIZE;
         Node* volatile            _new_node;
-        Hb*                       _hbmon;
+        Monitor*                  _mon;
         LearningEngine*           _learner;
         int                       _sc_tune_id;
 
@@ -88,11 +89,8 @@ private:
                 int maxPasses;
                 if ( 0 == FCBase<T>::_enable_scancount_tuning )
                         maxPasses = FCBase<T>::_num_passes;
-                else {
-		        //maxPasses = CCP::Math::Max(10, 1 + 2*_learner->getdiscval(_sc_tune_id, iThread));
-		        maxPasses = 1 + 2*_learner->getdiscval(_sc_tune_id, iThread);
-                        //cerr << "maxPasses = " << maxPasses << endl;
-                }
+                else
+		        maxPasses = 1 + 4*_learner->getdiscval(_sc_tune_id, iThread);
                 
                 int num_added = 0;
 		int total_changes = 0;
@@ -106,10 +104,8 @@ private:
                         while(null != curr_slot->_next) {
                                 final FCIntPtr curr_value = curr_slot->_req_ans;
                                 if(curr_value > FCBase<T>::_NULL_VALUE) {
-				        if ( 0 == _gIsDedicatedMode ) {
-                                                ++num_changes;
-			                        //_hbmon->heartbeat(1);   
-					}
+				        if ( 0 == _gIsDedicatedMode )
+                                                ++num_changes; 
                                         *enq_value_ary = curr_value;
                                         ++enq_value_ary;
                                         curr_slot->_req_ans = FCBase<T>::_NULL_VALUE;
@@ -131,7 +127,6 @@ private:
                                         final FCIntPtr curr_deq = *deq_value_ary;
                                         if(0 != curr_deq) {
                                                 ++num_changes;
-			                        //_hbmon->heartbeat(1); 
                                                 curr_slot->_req_ans = -curr_deq;
                                                 curr_slot->_time_stamp = FCBase<T>::_NULL_VALUE;
                                                 ++deq_value_ary;
@@ -143,10 +138,8 @@ private:
                                                 deq_value_ary += deq_value_ary[0];
                                                 continue;
                                         } else {
-					        if ( 0 == _gIsDedicatedMode ) {
+					        if ( 0 == _gIsDedicatedMode )
                                                         ++num_changes;
-			                                //_hbmon->heartbeat(1); 
-					        }
                                                 curr_slot->_req_ans = FCBase<T>::_NULL_VALUE;
                                                 curr_slot->_time_stamp = FCBase<T>::_NULL_VALUE;
                                         } 
@@ -157,11 +150,11 @@ private:
                         }//while on slots
 
 			total_changes += num_changes;   
-			if ( num_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
-			        _hbmon->heartbeat(num_changes);                     
 
-                }//for repetition
+		}//for repetition
 
+		if ( total_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
+		        _mon->addreward(total_changes);
 
                 if(0 == *deq_value_ary && null != _tail->_next) {
                         Node* tmp = _tail;
@@ -184,10 +177,10 @@ private:
 
 public:
         //public operations ---------------------------
-        SmartQueue(Hb* hbmon, LearningEngine* learner) 
+        SmartQueue(Monitor* mon, LearningEngine* learner) 
         :       _NUM_REP(FCBase<T>::_NUM_THREADS),
                 _REP_THRESHOLD((int)(Math::ceil(FCBase<T>::_NUM_THREADS/(1.7)))),
-	        _hbmon(hbmon),
+	        _mon(mon),
 	        _learner(learner)
         {
                 _head = Node::get_new(FCBase<T>::_NUM_THREADS);
@@ -204,6 +197,10 @@ public:
                         _sc_tune_id = _learner->register_sc_tune_id();
 
                 _fc_lock = new SmartLockLite<FCIntPtr>(FCBase<T>::_NUM_THREADS, _learner);
+
+                if ( null == _mon )
+		        _mon = new Hb(false);
+
                 Memory::read_write_barrier();
         }
 

@@ -40,11 +40,12 @@ threads="14"
 #algorithms="fcqueue fcskiplist fcpairheap smartqueue smartskiplist smartpairheap msqueue basketsqueue ctqueue lfskiplist lazyskiplist fcstack lfstack elstack"
 #algorithms="smartqueue smartskiplist smartpairheap"
 #algorithms="oyamaqueuecom"
-algorithms="smartskiplist"
+algorithms="smartqueue smartskiplist smartpairheap"
 
 #the setting to use for the flat combining scancount parameter
 #use 0 if you want it to be nthreads
 #scancounts="1 3 5 7 9 11 13 15 17 19 21 23 25"
+#scancounts="1 5 9 13 17 21 25 29 33 37 41 45 49"
 scancounts="0"
 
 #currently deprecated
@@ -52,17 +53,17 @@ scancounts="0"
 syncintervals="0"
 
 #use these for 3 producers, 11 consumers
-dedicated="1"
-addops="21"
-removeops="79"
+#dedicated="1"
+#addops="21"
+#removeops="79"
 #use these for 2 producers, 12 consumers
 #dedicated="1"
 #addops="14"
 #removeops="86"
 #use these for 1 producer, (threads-1) consumers
-#dedicated="1"
-#addops="1"
-#removeops="99"
+dedicated="1"
+addops="1"
+removeops="99"
 #use these for random insert / delete from all threads
 #dedicated="0"
 #addops="50"
@@ -85,16 +86,16 @@ lockscheduling="0"
 
 #configure to simulate slowdown of rl thread 
 #rltime / totaltime
-rltosleepidleratios="1.0 .5 .25 .125 .0625 .03125 .015625"
+#rltosleepidleratios="1.0 .5 .25 .125 .0625 .03125 .015625"
 #rltosleepidleratios=".03125 .015625"
-#rltosleepidleratios="1.0"
+rltosleepidleratios="1.0"
 
 #how many trials of each experiment to perform
 reps="0 1 2 3 4 5 6 7 8 9"
 
 #how many data structures to instantiate
 #normal
-numds="3"
+numds="1"
 #more than 1
 #numds="1 2 4 8 16"
 #numds="2 4 8 16"

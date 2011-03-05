@@ -50,12 +50,11 @@ extern volatile int _gIsStopThreads;
 
 
 struct CasInfo {
-        char _pad1[CACHE_LINE_SIZE];
-        int  _failed;
+        int  _failed  ATTRIBUTE_CACHE_ALIGNED;
         int  _succ;
         int  _locks;
         int  _ops;
-        char _pad2[CACHE_LINE_SIZE-4*sizeof(int)];
+        char _pad2    ATTRIBUTE_CACHE_ALIGNED;
 
         CasInfo() {
                 _failed = 0;
@@ -74,12 +73,14 @@ struct CasInfo {
 
 
 struct SlotInfo {
-        FCIntPtr volatile      _req_ans;       //here 1 can post the request and wait for answer
-        int volatile           _time_stamp;    //when 0 not connected
-        SlotInfo* volatile     _next;          //when null not connected
+        //here 1 can post the request and wait for answer
+        FCIntPtr volatile      _req_ans       ATTRIBUTE_CACHE_ALIGNED; 
+        int volatile           _time_stamp; 
+        SlotInfo* volatile     _next; 
         SlotInfo* volatile     _prev;
         void*                  _custem_info;
         bool                   _deq_pending;
+        char                   _pad           ATTRIBUTE_CACHE_ALIGNED;
 
         SlotInfo() {
                 _req_ans     = _FC_NULL_VALUE;

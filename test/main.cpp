@@ -413,7 +413,6 @@ public:
 int main(int argc, char **argv) {
 
         //..........................................................................
-        _hbmon = new Hb();
         _seed = Random::getSeed();
 
         //contaminate memory manager ...............................................
@@ -431,6 +430,9 @@ int main(int argc, char **argv) {
         }
 
         //initialize global variables ..............................................
+        int tmp = _gConfiguration._alg1_num + _gConfiguration._alg2_num + _gConfiguration._alg3_num + _gConfiguration._alg4_num;
+        bool concurrent = tmp != 1;
+        _hbmon = new Hb(concurrent);
         _gNumProcessors     = 1; //Runtime.getRuntime().availableProcessors();
         _gNumThreads        = _gConfiguration._no_of_threads;
         _gIsDedicatedMode   = _gConfiguration._is_dedicated_mode;

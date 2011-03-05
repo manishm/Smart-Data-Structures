@@ -31,6 +31,7 @@
 #include "LearningEngine.h"
 #include "SmartLockLite.h"
 #include "Heartbeat.h"
+#include "Monitor.h"
 
 using namespace CCP;
 
@@ -85,7 +86,7 @@ protected://Flat Combining fields
         Node*                      succs[_MAX_LEVEL + 1];
         SlotInfo*                  _saved_remove_node[1024];
         Node*                      _saved_node_ptr[1024];
-        Hb*                        _hbmon;
+        Monitor*                   _mon;
         LearningEngine*            _learner;
         int                        _sc_tune_id;
 
@@ -146,7 +147,7 @@ protected://methods
                 if ( 0 == FCBase<T>::_enable_scancount_tuning )
                         maxPasses = FCBase<T>::_num_passes;
                 else
-		        maxPasses = 1 + 2*_learner->getdiscval(_sc_tune_id, iThread);
+		        maxPasses = 1 + 4*_learner->getdiscval(_sc_tune_id, iThread);
                 
                 int num_changes = 0;
                 for (int iTry=0;iTry<maxPasses; ++iTry) {
@@ -246,7 +247,7 @@ protected://methods
                 }
 
                 if ( num_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
-                        _hbmon->heartbeat(num_changes);
+                        _mon->addreward(num_changes);
 
 
                 if(-1 != max_level) {
@@ -273,12 +274,12 @@ protected://methods
 
 public://methods
 
-        SmartSkipList(Hb* hbmon, LearningEngine* learner)
+        SmartSkipList(Monitor* mon, LearningEngine* learner)
         : _head( Node::getNewNode(new PtrNode<T>(FCBase<T>::_MIN_INT, null)) ),
           _tail( Node::getNewNode(new PtrNode<T>(FCBase<T>::_MAX_INT, null)) ),
           _NUM_REP( Math::Min(2, FCBase<T>::_NUM_THREADS)),
           _REP_THRESHOLD((int)(Math::ceil(FCBase<T>::_NUM_THREADS/(1.7)))),
-          _hbmon(hbmon),
+          _mon(mon),
           _learner(learner)
         {
                 //initialize head to point to tail .....................................
@@ -290,6 +291,10 @@ public://methods
                         _sc_tune_id = _learner->register_sc_tune_id();
 
                 _fc_lock = new SmartLockLite<FCIntPtr>(FCBase<T>::_NUM_THREADS, _learner);
+
+                if ( null == _mon )
+		        _mon = new Hb(false);
+
                 Memory::read_write_barrier();
         }
 

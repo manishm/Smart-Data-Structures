@@ -58,47 +58,46 @@ public:
 
 private:
 
-        const learning_mode_t mode ATTRIBUTE_CACHE_ALIGNED;
-        
         friend void* learningengine(void *);
 
         //general
-        unsigned int                        nthreads ATTRIBUTE_CACHE_ALIGNED;
+        const learning_mode_t mode ATTRIBUTE_CACHE_ALIGNED;
+        Monitor*              mon;        
+        unsigned int          nthreads;
 
         //concurrency control
-        static volatile unsigned int        htlock        ATTRIBUTE_CACHE_ALIGNED;
-        static volatile unsigned int        refcount      ATTRIBUTE_CACHE_ALIGNED;
-        static volatile unsigned int        signalquit    ATTRIBUTE_CACHE_ALIGNED; //aligned?
-        static volatile unsigned int        lelock        ATTRIBUTE_CACHE_ALIGNED;
-        static volatile unsigned int        lelistpos     ATTRIBUTE_CACHE_ALIGNED;
-        static std::vector<LearningEngine*> lelist        ATTRIBUTE_CACHE_ALIGNED; //aligned?
-        static volatile _u64                learnercount  ATTRIBUTE_CACHE_ALIGNED;
+        static volatile unsigned int        htlock;
+        static volatile unsigned int        refcount;
+        static volatile unsigned int        signalquit;
+        static volatile unsigned int        lelock;
+        static volatile unsigned int        lelistpos;
+        static std::vector<LearningEngine*> lelist;
+        static volatile _u64                learnercount;
 
         //threading
         pthread_attr_t   managerthreadattr  ATTRIBUTE_CACHE_ALIGNED;
-        static pthread_t managerthread      ATTRIBUTE_CACHE_ALIGNED; //aligned?
+        static pthread_t managerthread;
 
         //reward
         double   last_checkpointed_reward   ATTRIBUTE_CACHE_ALIGNED;
-        double   total_reward_ever          ATTRIBUTE_CACHE_ALIGNED; //aligned?
-        timespec last_update_timestamp      ATTRIBUTE_CACHE_ALIGNED; //aligned?
-        Monitor  *mon                       ATTRIBUTE_CACHE_ALIGNED; //aligned?
+        double   total_reward_ever;
+        timespec last_update_timestamp;
 
         //learning
         int                  num_lock_sched ATTRIBUTE_CACHE_ALIGNED;
         int                  num_sc_tune;
-        volatile int         lock_sched_id  ATTRIBUTE_CACHE_ALIGNED;
-        volatile int         sc_tune_id     ATTRIBUTE_CACHE_ALIGNED;
-        rl_nac_t             r              ATTRIBUTE_CACHE_ALIGNED;
-        int*                 perm_vals      ATTRIBUTE_CACHE_ALIGNED; //aligned?
-        int*                 disc_vals      ATTRIBUTE_CACHE_ALIGNED; //aligned?
-        int*                 ext_disc_vals  ATTRIBUTE_CACHE_ALIGNED; //aligned?
-        int*                 ext_perm_vals  ATTRIBUTE_CACHE_ALIGNED; //aligned?
-        double*              probs          ATTRIBUTE_CACHE_ALIGNED; //aligned?
-        struct drand48_data  rng_state      ATTRIBUTE_CACHE_ALIGNED; //aligned?
+        volatile int         lock_sched_id;
+        volatile int         sc_tune_id;
+        int*                 perm_vals;
+        int*                 disc_vals;
+        int*                 ext_disc_vals;
+        int*                 ext_perm_vals;
+        double*              probs;
+        rl_nac_t             r;
+        struct drand48_data  rng_state      ATTRIBUTE_CACHE_ALIGNED;
 
         //slowdown 
-        double               rl_to_sleepidle_ratio;
+        double               rl_to_sleepidle_ratio  ATTRIBUTE_CACHE_ALIGNED;
         _u64                 time_window[8];
         int                  time_indx;
         _u64                 injection_nanos;
@@ -107,7 +106,7 @@ private:
         _u64                 time_sum;
 
         //padding
-        char pad[CACHE_LINE_SIZE];
+        char pad  ATTRIBUTE_CACHE_ALIGNED;
 
 
         //------------------------------------
@@ -367,7 +366,7 @@ private:
 
         double getmonitorsignal()
         {
-                return mon ? mon->getrewardlowoverhead() : 0;
+                return mon ? mon->getrewardnotsafe() : 0;
         }
 
         bool getreward( double *reward ) 
