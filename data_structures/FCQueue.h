@@ -193,32 +193,32 @@ public:
 
                         boolean is_cas = true;
                         if(lock_fc(_fc_lock, is_cas)) {
-                                #ifdef FCCASSTATS
+#ifdef FCCASSTATS
                                 ++(my_cas_info._succ);
-                                #endif
+#endif
                                 ++(my_cas_info._locks);
                                 FCBase<T>::machine_start_fc(iThread);
                                 flat_combining();
                                 _fc_lock.set(0);
                                 FCBase<T>::machine_end_fc(iThread);
-                                #ifdef FCCASSTATS
+#ifdef FCCASSTATS
                                 ++(my_cas_info._ops);
-                                #endif
+#endif
                                 return true;
                         } else {
                                 //Memory::write_barrier();
-                                #ifdef FCCASSTATS
+#ifdef FCCASSTATS
                                 if(!is_cas)
                                         ++(my_cas_info._failed);
-                                #endif
+#endif
                                 while(FCBase<T>::_NULL_VALUE != *my_re_ans && 0 != _fc_lock.getNotSafe()) {
                                         FCBase<T>::thread_wait(iThread);
                                 } 
                                 //Memory::read_barrier();
                                 if(FCBase<T>::_NULL_VALUE == *my_re_ans) {
-                                        #ifdef FCCASSTATS
+#ifdef FCCASSTATS
                                         ++(my_cas_info._ops);
-                                        #endif
+#endif
                                         return true;
                                 }
                         }
@@ -246,32 +246,32 @@ public:
 
                         boolean is_cas = true;
                         if(lock_fc(_fc_lock, is_cas)) {
-                                #ifdef FCCASSTATS
+#ifdef FCCASSTATS
                                 ++(my_cas_info._succ);
-                                #endif
+#endif
                                 ++(my_cas_info._locks);
                                 FCBase<T>::machine_start_fc(iThread);
                                 flat_combining();
                                 _fc_lock.set(0);
                                 FCBase<T>::machine_end_fc(iThread);
-                                #ifdef FCCASSTATS
+#ifdef FCCASSTATS
                                 ++(my_cas_info._ops);
-                                #endif
+#endif
                                 return (PtrNode<T>*) -(*my_re_ans);
                         } else {
                                 //Memory::write_barrier();
-                                #ifdef FCCASSTATS
+#ifdef FCCASSTATS
                                 if(!is_cas)
                                         ++(my_cas_info._failed);
-                                #endif
+#endif
                                 while(FCBase<T>::_DEQ_VALUE == *my_re_ans && 0 != _fc_lock.getNotSafe()) {
                                         FCBase<T>::thread_wait(iThread);
                                 }
                                 //Memory::read_barrier();
                                 if(FCBase<T>::_DEQ_VALUE != *my_re_ans) {
-                                        #ifdef FCCASSTATS
+#ifdef FCCASSTATS
                                         ++(my_cas_info._ops);
-                                        #endif
+#endif
                                         return (PtrNode<T>*) -(*my_re_ans);
                                 }
                         }

@@ -40,7 +40,7 @@ threads="14"
 #algorithms="fcqueue fcskiplist fcpairheap smartqueue smartskiplist smartpairheap msqueue basketsqueue ctqueue lfskiplist lazyskiplist fcstack lfstack elstack"
 #algorithms="smartqueue smartskiplist smartpairheap"
 #algorithms="oyamaqueuecom"
-algorithms="smartqueue smartskiplist smartpairheap"
+algorithms="smartqueue"
 
 #the setting to use for the flat combining scancount parameter
 #use 0 if you want it to be nthreads
@@ -88,6 +88,7 @@ lockscheduling="0"
 #rltime / totaltime
 #rltosleepidleratios="1.0 .5 .25 .125 .0625 .03125 .015625"
 #rltosleepidleratios=".03125 .015625"
+#rltosleepidleratios="1.0"
 rltosleepidleratios="1.0"
 
 #how many trials of each experiment to perform

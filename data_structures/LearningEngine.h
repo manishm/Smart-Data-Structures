@@ -73,6 +73,7 @@ private:
         static volatile unsigned int        lelistpos;
         static std::vector<LearningEngine*> lelist;
         static volatile _u64                learnercount;
+        volatile unsigned int               dellock  ATTRIBUTE_CACHE_ALIGNED;
 
         //threading
         pthread_attr_t   managerthreadattr  ATTRIBUTE_CACHE_ALIGNED;
@@ -161,11 +162,14 @@ private:
 
                //cerr << "In registerLearner with mode=" << mode << endl;
                
+               initSlowdownMode();
+               initAPI();
+               initrl();
+
                while( (0 != htlock) || !CAS(&htlock, 0, 1) );
 
                learnercount += U64(0x0001000000000001);
 
-               initrl();
                //CCP::Memory::read_write_barrier();
 
                if ( refcount++ == 0 )
@@ -176,6 +180,7 @@ private:
                                pthread_create(&managerthread, &managerthreadattr, learningengine, NULL);
                        }
                }
+
                CCP::Memory::read_write_barrier();
                htlock = 0;
 
@@ -193,7 +198,7 @@ private:
 
                while( (0 != htlock) || !CAS(&htlock, 0, 1) );
 
-               learnercount += U64(0xFFFF000000000001);      
+               learnercount += U64(0xFFFF000000000001);     
 
                if ( --refcount == 0 )
                {
@@ -204,9 +209,17 @@ private:
                        }
                }
 
-               deinitrl();
                CCP::Memory::read_write_barrier();
                htlock = 0;
+
+               while( (0 != dellock) || !CAS(&dellock, 0, 1) );
+
+               deinitrl();
+               deinitAPI();
+               deinitSlowdownMode();
+
+               CCP::Memory::read_write_barrier();
+               dellock = 0;
         }
 
 
@@ -364,14 +377,15 @@ private:
                 return ts;
         }
 
-        double getmonitorsignal()
+        double getmonitorsignal(_u64 lastval)
         {
-                return mon ? mon->getrewardnotsafe() : 0;
+	        //return mon ? mon->getrewardnotsafe() : 0;
+                return mon ? mon->waitrewardnotsafe(lastval) : 0;
         }
 
         bool getreward( double *reward ) 
         {
-                double total_reward_ever = getmonitorsignal();
+                double total_reward_ever = getmonitorsignal(last_checkpointed_reward);
                 double accumulated_heartbeats = total_reward_ever - last_checkpointed_reward;
 
                 // all of the information we need to compute a rate.
@@ -380,7 +394,7 @@ private:
                 double time_elapsed = ((double) elapsed) / ((double) 1e9);
 
                 // originals 10, .0001
-                if ( accumulated_heartbeats > 10 || time_elapsed > 0.0001 ) {
+                if ( (accumulated_heartbeats > 10) || (time_elapsed > 0.0001) ) {
                         last_update_timestamp = tmp_time;
                         double r = accumulated_heartbeats / time_elapsed;
                         *reward = r;
@@ -419,6 +433,9 @@ private:
                 //cerr << "running rl update" << endl;
                 //ML policy
 
+	        if ( !CAS(&dellock, 0, 1) )
+		        return;
+
                 _u64 start_seq_no = (learnercount & U64(0xFFFFFFFFFFFF));
                 _u64 status;
                 _u64 num_live;
@@ -456,7 +473,7 @@ private:
                 } while( (0 == (mode & manual_stepping)) && (num_live == 1) && (seq_no == start_seq_no) );
 
                 CCP::Memory::read_write_barrier();
-
+                dellock = 0;                
         }
 
         // given a multinomial probability vector, sample an index
@@ -481,6 +498,9 @@ private:
 
                 // random policy
 
+	        if ( !CAS(&dellock, 0, 1) )
+		        return;
+
                 // initialize them all equally likely (adjusted for initial renormalizing)
                 for(int i = 0; i < nthreads; i++)
                         probs[i] = 1.;
@@ -502,6 +522,7 @@ private:
                 }
 
                 CCP::Memory::read_write_barrier();
+                dellock = 0; 
         }
 
 
@@ -521,20 +542,17 @@ private:
            num_lock_sched(num_lock_scheduling),
            num_sc_tune(num_scancount_tuning),
            lock_sched_id(0),
-           sc_tune_id(0)
+	   sc_tune_id(0),
+	   dellock(0)
         {
 	        //cerr << "instantiated a learner. num_sc_tune= " << num_sc_tune << endl;
                 modeCheck();
-                initSlowdownMode();
-                initAPI();
                 registerLearner(this);
         }
 
         ~LearningEngine() 
         {
                 unregisterLearner(this);
-                deinitAPI();
-                deinitSlowdownMode();
         }
 
         inline int register_lock_sched_id()

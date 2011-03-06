@@ -2,43 +2,36 @@
 #ifndef __SMARTLOCKLITE__
 #define __SMARTLOCKLITE__
 
-////////////////////////////////////////////////////////////////////////////////               
-// File    : SmartLockLite.h                                                                 
-// Author  : Jonathan Eastep   email: jonathan.eastep@gmail.com                                
+////////////////////////////////////////////////////////////////////////////////
+// File    : SmartLockLite.h                                                    
+// Author  : Jonathan Eastep   email: jonathan.eastep@gmail.com                 
 // Written : 16 February 2011
-//                                                                                             
+//                                                                              
 // Copyright (C) 2011 Jonathan Eastep
-//                                                                                             
-// This program is free software; you can redistribute it and/or modify                        
-// it under the terms of the GNU General Public License as published by                        
-// the Free Software Foundation; either version 2 of the License, or                           
-// (at your option) any later version.                                                         
-//                                                                                             
-// This program is distributed in the hope that it will be useful, but                         
-// WITHOUT ANY WARRANTY; without even the implied warranty of                                  
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU                            
-// General Public License for more details.                                                    
-//                                                                                             
-// You should have received a copy of the GNU General Public License                           
-// along with this program; if not, write to the Free Software Foundation                      
-// Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA                                 
-//////////////////////////////////////////////////////////////////////////////// 
+//                                                                              
+// This program is free software; you can redistribute it and/or modify         
+// it under the terms of the GNU General Public License as published by         
+// the Free Software Foundation; either version 2 of the License, or            
+// (at your option) any later version.                                          
+//                                                                              
+// This program is distributed in the hope that it will be useful, but          
+// WITHOUT ANY WARRANTY; without even the implied warranty of                   
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU           
+// General Public License for more details.                                     
+//                                                                              
+// You should have received a copy of the GNU General Public License            
+// along with this program; if not, write to the Free Software Foundation       
+// Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA                  
+////////////////////////////////////////////////////////////////////////////////
 
 #define CASSTATS
 
 
 #include <assert.h>
-#include <pthread.h>
-#include <stdlib.h>
-#include <string.h>
-#include <vector>
-#include <math.h>
 #include "LearningEngine.h"
-#include "rl_agent_c.h"
 #include "cpp_framework.h"
 #include "portable_defns.h"
 
-#include <unistd.h>
 
 using namespace std;
 
@@ -74,22 +67,22 @@ public:
 // SmartLocks Lite Per-thread handles
 
 template <typename T>
-class SmartLockLiteNode
-{
+class SmartLockLiteNode {
+
 private:
 
-        int            lock_sched_id ATTRIBUTE_CACHE_ALIGNED;
-        volatile _u64* fastprlock    ATTRIBUTE_CACHE_ALIGNED;
+        int              lock_sched_id  ATTRIBUTE_CACHE_ALIGNED;
+        volatile _u64*   fastprlock;
+        LearningEngine*  learner;
+        int              id;
+
+        volatile unsigned int  alg ATTRIBUTE_CACHE_ALIGNED;
 
 #ifdef CASSTATS
         unsigned int casops ATTRIBUTE_CACHE_ALIGNED;
-        unsigned int casfails ATTRIBUTE_CACHE_ALIGNED;
+        unsigned int casfails;
 #endif
 
-        volatile unsigned int alg ATTRIBUTE_CACHE_ALIGNED;
-        _u64 pri ATTRIBUTE_CACHE_ALIGNED;
-        LearningEngine *learner ATTRIBUTE_CACHE_ALIGNED;
-        int id ATTRIBUTE_CACHE_ALIGNED;
         char pad[CACHE_LINE_SIZE];
 
 public:
@@ -108,8 +101,6 @@ public:
                 id = 0;
                 learner = NULL;
 
-                pri = 0;
-
 #ifdef CASSTATS
                 casops = 0;
                 casfails = 0;
@@ -124,7 +115,6 @@ public:
                 fastprlock = &s->fastprlock;
                 id = i;
                 learner = le;
-                pri = learner->getpermval(lsid, id);
                 alg = a;
                 
                 CCP::Memory::read_write_barrier();
@@ -306,11 +296,12 @@ class SmartLockLite
 {
 private:
 
-        SmartLockLiteState state ATTRIBUTE_CACHE_ALIGNED;
-        const LearningEngine::learning_mode_t mode ATTRIBUTE_CACHE_ALIGNED;
-        unsigned int nthreads ATTRIBUTE_CACHE_ALIGNED;
-        LearningEngine* learner ATTRIBUTE_CACHE_ALIGNED;
-        SmartLockLiteNode<T> *slnodes ATTRIBUTE_CACHE_ALIGNED; //aligned?
+        const LearningEngine::learning_mode_t  mode;
+        SmartLockLiteState                     state;
+        SmartLockLiteNode<T>*                  slnodes; 
+        unsigned int                           nthreads;
+        LearningEngine*                        learner;
+
         char pad[CACHE_LINE_SIZE];
 
 public:

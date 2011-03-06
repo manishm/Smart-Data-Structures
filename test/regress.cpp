@@ -33,6 +33,8 @@
 #include <errno.h>
 
 #include "Heartbeat.h"
+#include "cpp_framework.h"
+
 #include "FCQueue.h"
 #include "SmartQueue.h"
 #include "MSQueue.h"
@@ -49,15 +51,17 @@
 #include "FCStack.h"
 #include "LFStack.h"
 #include "EliminationStack.h"
-#include "cpp_framework.h"
+#include "LazyCounter.h"
+
 
 using namespace CCP;
 using namespace std;
 
 #define NUMTRIALS (20)
 
-FCBase<FCIntPtr>*  queue;
-FCBase<FCIntPtr>*  queue2;
+FCBase<FCIntPtr>*       queue;
+FCBase<FCIntPtr>*       queue2;
+LazyCounter*  lazycounter;
 
 typedef FCIntPtr      lli;
 
@@ -124,6 +128,9 @@ void * func(void* args)
 	for(int i = 0; i < total; i++)
 	{
 	        RandSleep();
+                lazycounter->increment(tid, 1);
+
+	        RandSleep();
                 //volatile so the compiler doesn't optimize it out
                 FCIntPtrNode* volatile res;  
 		do {
@@ -156,8 +163,13 @@ void * func(void* args)
 }
 
 
-bool parallel_test(FCBase<FCIntPtr>* queue, FCBase<FCIntPtr>* queue2)
+bool parallel_test(FCBase<FCIntPtr>* queue, FCBase<FCIntPtr>* queue2, LazyCounter* lazycounter)
 {
+        if ( lazycounter == null ) {
+	        cerr << "Failed parallel test of null data structure" << endl;
+                return false; 
+        }
+
         if ( queue == null ) {
 	        cerr << "Failed parallel test of null data structure" << endl;
 		return false;
@@ -212,6 +224,9 @@ bool parallel_test(FCBase<FCIntPtr>* queue, FCBase<FCIntPtr>* queue2)
 			if ( results2[i*CACHE_LINE_SIZE] == false )
 			        rv = false;
 		}
+                _u64 res = lazycounter->get();
+                if ( res != els )
+		        rv = false;
 
 		// reset
 		barrier = 0;
@@ -221,6 +236,8 @@ bool parallel_test(FCBase<FCIntPtr>* queue, FCBase<FCIntPtr>* queue2)
 		        results1[i*CACHE_LINE_SIZE] = false;
 			results2[i*CACHE_LINE_SIZE] = false;
 		}
+                for(int i = 0; i < _gNumThreads; i++)
+		        lazycounter->reset(i);
 
 	}
 
@@ -229,9 +246,9 @@ bool parallel_test(FCBase<FCIntPtr>* queue, FCBase<FCIntPtr>* queue2)
 	}
 
 	if ( rv )
-	        cerr << "Passed parallel test of " << queue->name() << endl;
+	        cerr << "Passed parallel test of " << queue->name() << " and LazyCounter" << endl;
 	else
-	        cerr << "Failed parallel test of " << queue->name() << endl;
+	        cerr << "Failed parallel test of " << queue->name() << " and LazyCounter" << endl;
 
 	return rv;
 }
@@ -303,7 +320,7 @@ bool serial_test(FCBase<FCIntPtr>* queue, TESTTYPE type)
 	return rv;
 }
 
-bool destruct_test(FCBase<lli>** ds1, FCBase<lli>** ds2, int num_ds, Hb* hbmon, LearningEngine** learner)
+bool destruct_test(FCBase<lli>** ds1, FCBase<lli>** ds2, int num_ds, LazyCounter* lc, Hb* hbmon, LearningEngine** learner)
 {
         bool rv = true;
         try {
@@ -313,8 +330,9 @@ bool destruct_test(FCBase<lli>** ds1, FCBase<lli>** ds2, int num_ds, Hb* hbmon, 
                         delete ds2[i];
 			delete learner[i];
                 }
+                delete   lc;
 		delete[] learner;
-		delete hbmon;
+		delete   hbmon;
         }
         catch(...) {
 	        cerr << "Failed destruct test" << endl;
@@ -360,6 +378,7 @@ int main(int argc, char* argv[])
 #else
         FCBase<lli>* ds2[NUMDS] = {null};
 #endif
+        LazyCounter* lc = new LazyCounter(_gNumThreads);
 
         int PRISTART = 7;
         int STACKSTART = 13;
@@ -377,6 +396,7 @@ int main(int argc, char* argv[])
 
                 queue = ds1[j];
                 queue2 = ds2[j];
+                lazycounter = lc;
 
                 for(int i = 0; i < NUMTRIALS; i++) {
                         TESTTYPE type = (j < PRISTART) ? FIFO : ((j < STACKSTART) ? PRI : LIFO);
@@ -389,7 +409,7 @@ int main(int argc, char* argv[])
                         cerr << "Passed all serial tests of " << queue->name() << endl;
 
                 for(int i = 0; i < NUMTRIALS; i++) {
-                        rv = parallel_test(queue, queue2);
+		        rv = parallel_test(queue, queue2, lazycounter);
                         megafails += rv ? 0 : 1;
 #ifdef QUEUE2
                         megaskips += ((null == queue) || (null == queue2)) ? 1 : 0;
@@ -399,13 +419,13 @@ int main(int argc, char* argv[])
                         ptotal &= rv;
                 }
                 if ( ptotal )
-                        cerr << "Passed all parallel tests of " << queue->name() << endl;
+		        cerr << "Passed all parallel tests of " << queue->name() << " and LazyCounter" << endl;
 
                 megatotal &= stotal;
                 megatotal &= ptotal;
         }
 
-        bool rv = destruct_test(ds1, ds2, NUMDS, hbmon, learner);
+        bool rv = destruct_test(ds1, ds2, NUMDS, lc, hbmon, learner);
         megafails += rv ? 0 : 1;
         megatotal &= rv;
 

@@ -35,24 +35,53 @@ class Hb: public Monitor {
 
 private:
 
-        volatile _u64    total_items  ATTRIBUTE_CACHE_ALIGNED; 
-        final bool       concurrent   ATTRIBUTE_CACHE_ALIGNED;
-        char             pad          ATTRIBUTE_CACHE_ALIGNED;
+        //mode. non-concurrent mode enables optimization
+        final bool         concurrent     ATTRIBUTE_CACHE_ALIGNED;
+
+        //written atomically: via write in !concurrent mode otherwise via atomic ops 
+        volatile _u64      total_items    ATTRIBUTE_CACHE_ALIGNED; 
+
+        //backoff settings in nanoseconds
+        static final _u64  BACKOFF_START  ATTRIBUTE_CACHE_ALIGNED  = 100;
+        static final _u64  BACKOFF_MAX                             = 1600;
+
+        char               pad            ATTRIBUTE_CACHE_ALIGNED;
 
 public:
 
         Hb(bool concurrent = true)
 	: concurrent(concurrent),
-	  total_items(0) 
+	  total_items(0)
         {
                 CCP::Memory::read_write_barrier();
-		//std::cerr << "concurrent = " << concurrent << std::endl;
         }
 
         ~Hb() {}
 
+        inline _u64 waitrewardnotsafe(_u64 lastval)
+	{
+                //check if changed. if so return new val.
+                _u64 newval = total_items;
+                if ( newval != lastval )
+                        return newval;
+
+                //spin with backoff until val changes
+                _u64 backoff = BACKOFF_START; 
+                do {
+                        CCP::Thread::delay(backoff);
+                        backoff <<= 1;
+                        if ( backoff > BACKOFF_MAX )
+                                return total_items;
+
+                        newval = total_items;
+                } while( newval == lastval );
+
+                //return new val
+                return newval;
+	}
+
         inline _u64 getrewardnotsafe() {
-                return total_items;
+	        return total_items;
         }
 
         inline _u64 getreward() {
@@ -60,12 +89,13 @@ public:
         }
 
         inline void heartbeatnotsafe( int num_beats = 1 ) {
-                total_items += num_beats;     
+	        _u64 newtotal = total_items + num_beats;
+                total_items = newtotal;
         }
 
         inline void heartbeat( int num_beats = 1 ) {
 	        if ( concurrent )
-                        FAADD(&total_items, num_beats);     
+                        _u64 tmp = FAADD(&total_items, num_beats);     
                 else
 		        heartbeatnotsafe(num_beats);
         }

@@ -57,17 +57,18 @@ private:
         };
 
         //fields --------------------------------------
-        SmartLockLite<FCIntPtr>*  _fc_lock;
-        char                      _pad1[CACHE_LINE_SIZE];
+        SmartLockLite<FCIntPtr>*  _fc_lock         ATTRIBUTE_CACHE_ALIGNED;
         final int                 _NUM_REP;
         final int                 _REP_THRESHOLD;
-        Node* volatile            _head;
-        Node* volatile            _tail;
-        int volatile              _NODE_SIZE;
-        Node* volatile            _new_node;
         Monitor*                  _mon;
         LearningEngine*           _learner;
         int                       _sc_tune_id;
+
+        Node* volatile            _head            ATTRIBUTE_CACHE_ALIGNED;
+        Node* volatile            _tail;
+        int volatile              _NODE_SIZE;
+        Node* volatile            _new_node;
+        char                      _pad             ATTRIBUTE_CACHE_ALIGNED;
 
 
         //helper function -----------------------------

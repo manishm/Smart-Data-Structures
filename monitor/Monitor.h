@@ -38,6 +38,8 @@ public:
         virtual void addreward(int amt) = 0;
 
         virtual void addrewardnotsafe(int amt) = 0;
+
+        virtual _u64 waitrewardnotsafe(_u64 lastval) = 0;
 };
 
 #endif

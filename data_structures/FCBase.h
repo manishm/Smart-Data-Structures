@@ -96,7 +96,7 @@ template <class T>
 class FCBase {
 public:
 
-        static volatile int _num_post_read_write;
+        static volatile int _num_post_read_write       ATTRIBUTE_CACHE_ALIGNED;
         static int          _num_passes;
         static int          _sync_interval;
         static int          _enable_scancount_tuning;
@@ -109,21 +109,21 @@ public:
         static final FCIntPtr _MIN_INT    = _FC_MIN_INT;
         static final FCIntPtr _MAX_INT    = _FC_MAX_INT;
 
-        CCP::AtomicInteger _barr;
+        CCP::AtomicInteger  _barr  ATTRIBUTE_CACHE_ALIGNED;
 
 protected:
 
-        static final int _MAX_THREADS   = 1024;
-
         //constants -----------------------------------
-        final int       _NUM_THREADS;
-        final boolean   _IS_USE_CONDITION;
+        final int         _NUM_THREADS  ATTRIBUTE_CACHE_ALIGNED;
+        static final int  _MAX_THREADS  = 1024;
+        final boolean     _IS_USE_CONDITION;
+        int               _sync_count; 
 
-        CasInfo         _cas_info_ary[_MAX_THREADS];
-        int             _cpu_cash_contamination[8*1024*1024];
-        int             _iTry[_MAX_THREADS*CACHE_LINE_SIZE];
+        CasInfo           _cas_info_ary[_MAX_THREADS];
+        int               _cpu_cash_contamination[8*1024*1024];
+        int               _iTry[_MAX_THREADS*CACHE_LINE_SIZE];
 
-        int             _sync_count;
+
 
         //helper function -----------------------------
 
@@ -306,7 +306,7 @@ public:
                         //however, it will be inaccurate in a not bad way if not tuned
                         //since all data structures use it. the time units will simply
                         //be of the wrong scale
-                        ++_iTry[iThread*CACHE_LINE_SIZE];
+                        //++_iTry[iThread*CACHE_LINE_SIZE];
                         _u64 its = (_num_post_read_write * 2 + 2) / 3; //factor
                         _u64 val = 0;
                         for(int i = 0; i < its; ++i)

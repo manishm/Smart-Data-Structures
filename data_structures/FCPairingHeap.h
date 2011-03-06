@@ -31,6 +31,8 @@
 #include "FCBase.h"
 #include "PairingHeap.h"
 
+//#define FCCASSTATS
+
 using namespace CCP;
 
 template <class T>
@@ -104,24 +106,32 @@ public:
 
                         boolean is_cas = false;
                         if(lock_fc(_fc_lock, is_cas)) {
+#ifdef FCCASSTATS
                                 ++(my_cas_info._succ);
+#endif
                                 ++(my_cas_info._locks);
                                 FCBase<T>::machine_start_fc(iThread);
                                 flat_combining();
                                 _fc_lock.set(0);
                                 FCBase<T>::machine_end_fc(iThread);
+#ifdef FCCASSTATS
                                 ++(my_cas_info._ops);
+#endif
                                 return true;
                         } else {
                                 Memory::write_barrier();
+#ifdef FCCASSTATS
                                 if(!is_cas)
                                         ++(my_cas_info._failed);
+#endif
                                 while(FCBase<T>::_NULL_VALUE != my_re_ans && 0 != _fc_lock.getNotSafe()) {
                                         FCBase<T>::thread_wait(iThread);
                                 } 
                                 Memory::read_barrier();
                                 if(FCBase<T>::_NULL_VALUE == my_re_ans) {
+#ifdef FCCASSTATS
                                         ++(my_cas_info._ops);
+#endif
                                         return true;
                                 }
                         }
@@ -148,24 +158,32 @@ public:
 
                         boolean is_cas = false;
                         if(lock_fc(_fc_lock, is_cas)) {
+#ifdef FCCASSTATS
                                 ++(my_cas_info._succ);
+#endif
                                 ++(my_cas_info._locks);
                                 FCBase<T>::machine_start_fc(iThread);
                                 flat_combining();
                                 _fc_lock.set(0);
                                 FCBase<T>::machine_end_fc(iThread);
+#ifdef FCCASSTATS
                                 ++(my_cas_info._ops);
+#endif
                                 return (PtrNode<T>*) -(my_re_ans);
                         } else {
                                 Memory::write_barrier();
+#ifdef FCCASSTATS
                                 if(!is_cas)
                                         ++(my_cas_info._failed);
+#endif
                                 while(FCBase<T>::_DEQ_VALUE == my_re_ans && 0 != _fc_lock.getNotSafe()) {
                                         FCBase<T>::thread_wait(iThread);
                                 }
                                 Memory::read_barrier();
                                 if(FCBase<T>::_DEQ_VALUE != my_re_ans) {
+#ifdef FCCASSTATS
                                         ++(my_cas_info._ops);
+#endif
                                         return (PtrNode<T>*) -(my_re_ans);
                                 }
                         }
