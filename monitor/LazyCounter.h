@@ -1,16 +1,14 @@
-#ifndef __HEARTBEAT__
-#define __HEARTBEAT__
+#ifndef __LAZY_COUNTER__
+#define __LAZY_COUNTER__
 
 ////////////////////////////////////////////////////////////////////////////////
-// File    : Heartbeat.h                                                        
-// Authors : Jonathan Eastep   email: jonathan.eastep@gmail.com                 
-//           Henry Hoffman     email: hank@.mit.edu                             
-//           David Wingate     email: wingated@mit.edu                          
-// Written : 16 February 2011                                                   
+// File    : LazyCounter.h                                                        
+// Authors : Jonathan Eastep   email: jonathan.eastep@gmail.com                
+// Written : 4 March 2011 
 //                                                                              
-// A much simplified version of Heartbeats                                    
+// Fast concurrent counter
 //                                                                              
-// Copyright (C) 2011 Jonathan Eastep, Henry Hoffman, David Wingate             
+// Copyright (C) 2011 Jonathan Eastep
 //                                                                              
 // This program is free software; you can redistribute it and/or modify         
 // it under the terms of the GNU General Public License as published by         
@@ -33,41 +31,81 @@
 #include "FCBase.h"
 
 
-class Hb: public Monitor, public FCBase<FCIntPtr> {
+class LazyCounter : public Monitor, public FCBase<FCIntPtr> {
 
 private:
 
-        //mode. non-concurrent mode enables optimization
-        final bool         concurrent     ATTRIBUTE_CACHE_ALIGNED;
-
-        //written atomically: via write in !concurrent mode otherwise via atomic ops 
-        volatile _u64      total_items    ATTRIBUTE_CACHE_ALIGNED; 
+        int              _nthreads        ATTRIBUTE_CACHE_ALIGNED;
+        bool             _concurrent;
+        _u64*            _buffer;
+        volatile _u64*   _counters;
 
         //backoff settings in nanoseconds
-        static final _u64  BACKOFF_START  ATTRIBUTE_CACHE_ALIGNED  = 100;
-        static final _u64  BACKOFF_MAX                             = 1600;
+        static final _u64  BACKOFF_START  = 100;
+        static final _u64  BACKOFF_MAX    = 1600;
 
-        char               pad            ATTRIBUTE_CACHE_ALIGNED;
+        char pad                          ATTRIBUTE_CACHE_ALIGNED;
 
 public:
 
         //---------------------------------------------------------------------------
-        // Heartbeats API
-        //--------------------------------------------------------------------------- 
+        // LazyCounter API
+        //---------------------------------------------------------------------------
 
-        Hb(bool concurrent = true)
-	: concurrent(concurrent),
-	  total_items(0)
+        LazyCounter(int nthreads, bool concurrent = true) 
+	: _nthreads(nthreads),
+          _concurrent(concurrent)
         {
-                CCP::Memory::read_write_barrier();
+	        if ( !concurrent )
+		        _nthreads = 1;
+
+	        //each thread gets a counter on a separate cache line
+	        _buffer         = (_u64*)  malloc(CACHE_LINE_SIZE*_nthreads + CACHE_LINE_SIZE);
+                _u64 intbuffer =  (((((_u64) _buffer) + CACHE_LINE_SIZE - 1) / CACHE_LINE_SIZE) * CACHE_LINE_SIZE);
+                _counters = (volatile _u64*) intbuffer;
+
+                for(int i = 0; i < _nthreads; i++)
+		        _counters[i * CACHE_LINE_SIZE / sizeof(_u64)] = 0;
+
+		CCP::Memory::read_write_barrier();
         }
 
-        ~Hb() {}
+        ~LazyCounter() 
+        {
+	        free(_buffer);
+        }
 
-        inline _u64 waitheartbeatsnotsafe(_u64 lastval)
+        inline void increment(int tid, _u64 iAmt)
+	{
+	        //assume each counter is only written by one thread at a time
+                //there is one counter per cacheline so atomic ops are not needed
+	        tid = _concurrent ? tid : 0;
+	        _counters[tid * CACHE_LINE_SIZE / sizeof(_u64)] += iAmt;
+	}
+
+        inline void reset(int tid)
+	{
+	        //assume each counter is only written by one thread at a time
+                //there is one counter per cacheline so atomic ops are not needed
+	        tid = _concurrent ? tid : 0;
+	        _counters[tid * CACHE_LINE_SIZE / sizeof(_u64)] = 0;
+	}
+
+        inline _u64 get()
+	{
+                //TODO. next-line prefetch hints might be very useful
+	        _u64 sum = 0;
+	        for(int i = 0; i < _nthreads; i++) {
+		        sum += _counters[i * CACHE_LINE_SIZE / sizeof(_u64)];
+		}
+
+                return sum;
+	}
+
+        inline _u64 waitchange(_u64 lastval)
 	{
                 //check if changed. if so return new val.
-                _u64 newval = total_items;
+	        _u64 newval = get();
                 if ( newval != lastval )
                         return newval;
 
@@ -77,58 +115,38 @@ public:
                         CCP::Thread::delay(backoff);
                         backoff <<= 1;
                         if ( backoff > BACKOFF_MAX )
-                                return total_items;
+			        return get();
 
-                        newval = total_items;
+                        newval = get();
                 } while( newval == lastval );
 
                 //return new val
                 return newval;
 	}
 
-        inline _u64 spinheartbeatsnotsafe(_u64 lastval)
+        inline _u64 spinchange(_u64 lastval)
 	{
-                _u64 newval;
+	        _u64 newval;
                 do {
-                        newval = total_items;
+                        newval = get();
                 } while( newval == lastval );
 
                 return newval;
 	}
 
-        inline _u64 readheartbeatsnotsafe() {
-	        return total_items;
-        }
-
-        inline _u64 readheartbeats() {
-	        return concurrent ? FAADD(&total_items, 0) : total_items;  
-        }
-
-        inline void heartbeatnotsafe(int num_beats = 1) {
-	        total_items += num_beats;
-        }  
-
-        inline void heartbeat(int num_beats = 1) {
-	        if ( concurrent )
-                        _u64 tmp = FAADD(&total_items, num_beats);     
-                else 
-		        total_items += num_beats;
-        }
-        
-
         //---------------------------------------------------------------------------
         // Monitor API
         //---------------------------------------------------------------------------
 
-        inline _u64 waitrewardnotsafe(_u64 lastval) { return waitheartbeatsnotsafe(lastval); }
+        inline _u64 waitrewardnotsafe(_u64 lastval) { return waitchange(lastval); }
 
-        inline _u64 getrewardnotsafe() { return readheartbeatsnotsafe(); }
+        inline _u64 getrewardnotsafe() { return get(); }
 
-        inline _u64 getreward() { return readheartbeats(); }
+        inline _u64 getreward() { return get(); }
 
-        inline void addrewardnotsafe(int tid, _u64 amt) { heartbeatnotsafe(amt); }
+        inline void addrewardnotsafe(int tid, _u64 amt) { increment(tid, amt); }
 
-        inline void addreward(int tid, _u64 amt) { heartbeat(amt); }
+        inline void addreward(int tid, _u64 amt) { increment(tid, amt); }
 
 
         //---------------------------------------------------------------------------
@@ -155,9 +173,8 @@ public:
         }
 
         final char* name() {
-                return "heartbeat";
+                return "lazycounter";
         }
-
 
 };
 

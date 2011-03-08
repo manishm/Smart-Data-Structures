@@ -30,16 +30,18 @@
 class Monitor {
 
 public:
+
         // this returns the total reward that has ever been registered
         virtual _u64 getreward() = 0;
 
         virtual _u64 getrewardnotsafe() = 0;
 
-        virtual void addreward(int amt) = 0;
+        virtual void addreward(int tid, _u64 amt) = 0;
 
-        virtual void addrewardnotsafe(int amt) = 0;
+        virtual void addrewardnotsafe(int tid, _u64 amt) = 0;
 
         virtual _u64 waitrewardnotsafe(_u64 lastval) = 0;
+
 };
 
 #endif

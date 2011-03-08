@@ -378,7 +378,7 @@ int main(int argc, char* argv[])
 #else
         FCBase<lli>* ds2[NUMDS] = {null};
 #endif
-        LazyCounter* lc = new LazyCounter(_gNumThreads);
+        LazyCounter* lc = new LazyCounter(_gNumThreads,true);
 
         int PRISTART = 7;
         int STACKSTART = 13;

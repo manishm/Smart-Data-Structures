@@ -36,6 +36,7 @@
 #include "cpp_framework.h"
 #include "Configuration.h"
 #include "Heartbeat.h"
+#include "LazyCounter.h"
 
 //FC research includes .................................
 //queues
@@ -105,7 +106,7 @@ static _u64 volatile                    _seed;
 static boolean                          _is_tm=false;
 static boolean                          _is_view=false;
 
-static Hb*                              _hbmon;
+static Monitor*                         _mon;
 
 static final int                        _num_work_amts             = 10;
 //static int                            _work_amts[_num_work_amts] = {800, 6400, 200, 3200, 1600, 100, 400, 100, 400, 800};
@@ -122,9 +123,12 @@ void PrepareRandomNumbers(final int size);
 int NearestPowerOfTwo(final int x);
 FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* learner);
 
+
 ////////////////////////////////////////////////////////////////////////////////
 //TYPEDEFS
 ////////////////////////////////////////////////////////////////////////////////
+
+//this is used for benchmarking smart data structures in the independent-computation mode
 class MixThread : public Thread {
 public:
         final int _threadNo;
@@ -175,7 +179,7 @@ public:
                                                 iNumAdd=0;
                                 }
                                 ++action_counter;
-                                //_hbmon->heartbeat();
+                                //_mon->heartbeat();
                         } else if(2==op) {
                                 for (int iDb=0; iDb<_num_ds; ++iDb) {
                                         *n = FCIntPtrNode( _gRandNumAry[iNumRemove] );
@@ -184,7 +188,7 @@ public:
                                         if(iNumRemove >= _gTotalRandNum) { iNumRemove=0; }
                                 }
                                 ++action_counter;
-                                //_hbmon->heartbeat();
+                                //_mon->heartbeat();
                         } else {
                                 for (int iDb=0; iDb<_num_ds; ++iDb) {
                                         *n = FCIntPtrNode( _gRandNumAry[iNumContain] );
@@ -193,7 +197,7 @@ public:
                                         if(iNumContain >= _gTotalRandNum) {     iNumContain=0; }
                                 }
                                 ++action_counter;
-                                //_hbmon->heartbeat();
+                                //_mon->heartbeat();
                         }
 
                         ++iOp;
@@ -223,7 +227,7 @@ public:
         }
 };
 
-
+//this is used for benchmarking smart data structures in producer-consumer mode
 class AddThread : public Thread {
 public:
         final int _threadNo;
@@ -262,7 +266,7 @@ public:
                                 iNumAdd=0;
 			//}
                         ++action_counter;
-                        //_hbmon->heartbeat();
+                        //_mon->heartbeat();
 
                         /*
                         if (_gConfiguration._read_write_delay > 0) {
@@ -288,7 +292,8 @@ public:
         }
 };
 
-
+//this is used for benchmarking smart data structures and monitors in producer-consumer mode
+//for monitors, remove is mapped to decrementing reward
 class RemoveThread : public Thread {
 public:
         final int _threadNo;
@@ -323,7 +328,7 @@ public:
                                 if(iNumRemove >= _gTotalRandNum) { iNumRemove=0; }
 			//}
                         ++action_counter;
-                        //_hbmon->heartbeat();
+                        //_mon->heartbeat();
 
                         if (_gConfiguration._read_write_delay > 0) {
                                 _gDS[0]->post_computation(_threadNo);
@@ -347,6 +352,9 @@ public:
         }
 };
 
+
+//this is used for benchmarking monitors in producer-consumer mode. 
+//contains is mapped to waitrewardnotsafe
 class ContainThread : public Thread {
 public:
         final int _threadNo;
@@ -355,7 +363,7 @@ public:
 
         void run() {
 
-                PtrNode<FCIntPtr>* n = new FCIntPtrNode(0);
+	        //PtrNode<FCIntPtr>* n = new FCIntPtrNode(0);
 
                 int iDb = _threadNo % _num_ds;
 
@@ -375,15 +383,17 @@ public:
                 int iNumRemove = start_counter*1024;
                 int iNumContain = start_counter*1024;
                 int iOp = start_counter*128;
+                _u64 last = 0;
+
                 do {
 		        //for (int iDb=0; iDb<_num_ds; ++iDb) {
-                                *n = FCIntPtrNode( _gRandNumAry[iNumContain] );
-                                _gDS[iDb]->contain(_threadNo, n);
+		                //*n = FCIntPtrNode( _gRandNumAry[iNumContain] );
+		                last = (_u64) _gDS[iDb]->contain(_threadNo, (FCIntPtrNode*) last);
                                 ++iNumContain;
                                 if(iNumContain >= _gTotalRandNum) {     iNumContain=0; }
 		        //}
                         ++action_counter;
-                        //_hbmon->heartbeat();
+                        //_mon->heartbeat();
 
                         if (_gConfiguration._read_write_delay > 0) {
                                 _gDS[0]->post_computation(_threadNo);
@@ -432,12 +442,15 @@ int main(int argc, char **argv) {
         //initialize global variables ..............................................
         int tmp = _gConfiguration._alg1_num + _gConfiguration._alg2_num + _gConfiguration._alg3_num + _gConfiguration._alg4_num;
         bool concurrent = tmp != 1;
-        _hbmon = new Hb(concurrent);
+
         _gNumProcessors     = 1; //Runtime.getRuntime().availableProcessors();
         _gNumThreads        = _gConfiguration._no_of_threads;
         _gIsDedicatedMode   = _gConfiguration._is_dedicated_mode;
         _gTotalRandNum      = Math::Max(_gConfiguration._capacity, 4*1024*1024);
         _gThroughputTime    = _gConfiguration._throughput_time;
+
+        //_mon = new Hb(concurrent);
+        _mon = new LazyCounter(_gNumThreads, concurrent);
 
         //prepare the random numbers ...............................................
         System_err_println("");
@@ -465,7 +478,7 @@ int main(int argc, char **argv) {
                 _gDS[iDb] = null;
         }
         //can't do this unless we delete all learning engines too else le tries to read from mon after deleted segfault
-	//delete _hbmon;
+	//delete _mon;
 
 }
 
@@ -536,7 +549,7 @@ void RunBenchmark() {
 
 
 	if ( 0 == strncmp(_gConfiguration._alg1_name, "smart", 5) )
-                learner = new LearningEngine(_gNumThreads, _hbmon, _gConfiguration._rl_to_sleepidle_ratio,
+                learner = new LearningEngine(_gNumThreads, _mon, _gConfiguration._rl_to_sleepidle_ratio,
 					     (LearningEngine::learning_mode_t) mode, 
                                              num_lock_sched*_gConfiguration._alg1_num, num_sc_tune*_gConfiguration._alg1_num );
 	else
@@ -553,7 +566,7 @@ void RunBenchmark() {
 
 
 	if ( 0 == strncmp(_gConfiguration._alg2_name, "smart", 5) )
-                learner = new LearningEngine(_gNumThreads, _hbmon, _gConfiguration._rl_to_sleepidle_ratio,
+                learner = new LearningEngine(_gNumThreads, _mon, _gConfiguration._rl_to_sleepidle_ratio,
 					     (LearningEngine::learning_mode_t) mode, 
                                              num_lock_sched*_gConfiguration._alg2_num, num_sc_tune*_gConfiguration._alg2_num );
 	else
@@ -571,7 +584,7 @@ void RunBenchmark() {
 
 
 	if ( 0 == strncmp(_gConfiguration._alg3_name, "smart", 5) )
-                learner = new LearningEngine(_gNumThreads, _hbmon, _gConfiguration._rl_to_sleepidle_ratio,
+                learner = new LearningEngine(_gNumThreads, _mon, _gConfiguration._rl_to_sleepidle_ratio,
 					     (LearningEngine::learning_mode_t) mode, 
                                              num_lock_sched*_gConfiguration._alg3_num, num_sc_tune*_gConfiguration._alg3_num );
 	else
@@ -588,7 +601,7 @@ void RunBenchmark() {
 
 
 	if ( 0 == strncmp(_gConfiguration._alg4_name, "smart", 5) )
-                learner = new LearningEngine(_gNumThreads, _hbmon, _gConfiguration._rl_to_sleepidle_ratio,
+                learner = new LearningEngine(_gNumThreads, _mon, _gConfiguration._rl_to_sleepidle_ratio,
 					     (LearningEngine::learning_mode_t) mode, 
                                              num_lock_sched*_gConfiguration._alg4_num, num_sc_tune*_gConfiguration._alg4_num );
 	else
@@ -739,7 +752,7 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* lear
                 return (new FCQueue<FCIntPtr>());
         }
         if(0 == strcmp(alg_name, "smartqueue")) {
-                return (new SmartQueue<FCIntPtr>(_hbmon, learner));
+                return (new SmartQueue<FCIntPtr>(_mon, learner));
         }
         if(0 == strcmp(alg_name, "msqueue")) {
                 return (new MSQueue<FCIntPtr>());
@@ -764,7 +777,7 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* lear
                 return (new FCSkipList<FCIntPtr>());
         }
         if(0 == strcmp(alg_name, "smartskiplist")) {
-                return (new SmartSkipList<FCIntPtr>(_hbmon, learner));
+                return (new SmartSkipList<FCIntPtr>(_mon, learner));
         }
         if(0 == strcmp(alg_name, "lfskiplist")) {
                 return (new LFSkipList<FCIntPtr>());
@@ -778,7 +791,7 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* lear
                 return (new FCPairHeap<FCIntPtr>());
         }
         if(0 == strcmp(alg_name, "smartpairheap")) {
-                return (new SmartPairHeap<FCIntPtr>(_hbmon, learner));
+                return (new SmartPairHeap<FCIntPtr>(_mon, learner));
         }
 
         //stack ....................................................................
@@ -786,13 +799,20 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* lear
                 return (new FCStack<FCIntPtr>());
         }
         //if(0 == strcmp(alg_name, "smartstack")) {
-        //      return (new SmartStack<FCIntPtr>(_hbmon));
+        //      return (new SmartStack<FCIntPtr>(_mon));
         //}
         if(0 == strcmp(alg_name, "lfstack")) {
                 return (new LFStack<FCIntPtr>());
         }
         if(0 == strcmp(alg_name, "elstack")) {
                 return (new EliminationStack<FCIntPtr>());
+        }
+
+        if(0 == strcmp(alg_name, "heartbeat")) {
+	        return (new Hb());
+        }
+        if(0 == strcmp(alg_name, "lazycounter")) {
+	        return (new LazyCounter(_gConfiguration._no_of_threads));
         }
 
         return null;

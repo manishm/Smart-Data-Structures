@@ -2,7 +2,7 @@
 #ifndef LEARNING_ENGINE_H
 #define LEARNING_ENGINE_H
 
-//////////////////////////////////////////////////////////////////////////////// 
+////////////////////////////////////////////////////////////////////////////////
 // File    : LearningEngine.h                                                  
 // Author  : Jonathan Eastep   email: jonathan.eastep@gmail.com            
 // Written : 16 February 2011
@@ -22,7 +22,7 @@
 // You should have received a copy of the GNU General Public License 
 // along with this program; if not, write to the Free Software Foundation
 // Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA  
-//////////////////////////////////////////////////////////////////////////////// 
+////////////////////////////////////////////////////////////////////////////////
 
 #include <assert.h>
 #include <pthread.h>
@@ -282,8 +282,17 @@ private:
         {
                 //FIXME: the other cases aren't handled yet
                 assert( (num_lock_sched == 0) || (num_lock_sched == 1) );
-                perm_vals = new int[nthreads];
+#if 1
+                int permbytes = ((sizeof(int)*nthreads + CACHE_LINE_SIZE - 1) / CACHE_LINE_SIZE) * CACHE_LINE_SIZE;
+                int discbytes = ((sizeof(int)*num_sc_tune + CACHE_LINE_SIZE - 1) / CACHE_LINE_SIZE) * CACHE_LINE_SIZE;
+
+                perm_vals     = (int*) CCP::Memory::byte_aligned_malloc(permbytes, CACHE_LINE_SIZE);
+                ext_perm_vals = (int*) CCP::Memory::byte_aligned_malloc(permbytes, CACHE_LINE_SIZE);
+#else
+                perm_vals     = new int[nthreads];
                 ext_perm_vals = new int[nthreads];
+#endif
+
                 for (int i = 0; i<nthreads; ++i) {
                         int p = clippriority( nthreads - 1 - i );
                         perm_vals[i] = p;
@@ -291,8 +300,13 @@ private:
                 }
 
                 assert( num_sc_tune >= 0 );
-                disc_vals = new int[num_sc_tune];
+#if 1
+                disc_vals     = (int*) CCP::Memory::byte_aligned_malloc(discbytes, CACHE_LINE_SIZE);
+                ext_disc_vals = (int*) CCP::Memory::byte_aligned_malloc(discbytes, CACHE_LINE_SIZE);
+#else
+                disc_vals     = new int[num_sc_tune];
                 ext_disc_vals = new int[num_sc_tune];
+#endif
                 for (int i = 0; i<num_sc_tune; ++i) {
                         disc_vals[i] = nthreads;
                         ext_disc_vals[i] = nthreads;
@@ -301,10 +315,17 @@ private:
 
         void deinitAPI()
         {
+#if 1
+	        CCP::Memory::byte_aligned_free(disc_vals);
+		CCP::Memory::byte_aligned_free(ext_disc_vals);
+		CCP::Memory::byte_aligned_free(perm_vals);
+		CCP::Memory::byte_aligned_free(ext_perm_vals);
+#else
                 delete[] disc_vals;
                 delete[] ext_disc_vals;
                 delete[] perm_vals;
                 delete[] ext_perm_vals;
+#endif
         }
 
         void initrl()

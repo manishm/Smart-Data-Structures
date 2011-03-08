@@ -247,7 +247,7 @@ protected://methods
                 }
 
                 if ( num_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
-                        _mon->addreward(num_changes);
+		        _mon->addreward(iThread, num_changes);
 
 
                 if(-1 != max_level) {

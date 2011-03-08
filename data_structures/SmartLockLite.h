@@ -309,7 +309,12 @@ public:
         SmartLockLite(unsigned int threads, LearningEngine *le): nthreads(threads), learner(le), mode(le->getmode())
         {
                 assert( threads <= 63 );
+#if 0
+                slnodes = (SmartLockLiteNode<T>*) CCP::Memory::byte_aligned_malloc(sizeof(SmartLockLiteNode<T>)*threads, CACHE_LINE_SIZE);
+#else
                 slnodes = new SmartLockLiteNode<T>[threads];
+#endif
+
                 typename SmartLockLiteNode<T>::algorithm_t a;
                 a = ((mode & (LearningEngine::lock_scheduling | LearningEngine::random_lock_scheduling)) ? 
                      SmartLockLiteNode<T>::PRLOCK : 
@@ -327,7 +332,11 @@ public:
 
         ~SmartLockLite() 
         {     
+#if 0
+	        CCP::Memory::byte_aligned_free(slnodes);
+#else
                 delete[] slnodes;
+#endif
                 CCP::Memory::read_write_barrier();
         }
 

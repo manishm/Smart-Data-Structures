@@ -155,7 +155,7 @@ private:
 		}//for repetition
 
 		if ( total_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
-		        _mon->addreward(total_changes);
+		        _mon->addreward(iThread, total_changes);
 
                 if(0 == *deq_value_ary && null != _tail->_next) {
                         Node* tmp = _tail;

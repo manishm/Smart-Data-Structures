@@ -40,7 +40,8 @@ threads="14"
 #algorithms="fcqueue fcskiplist fcpairheap smartqueue smartskiplist smartpairheap msqueue basketsqueue ctqueue lfskiplist lazyskiplist fcstack lfstack elstack"
 #algorithms="smartqueue smartskiplist smartpairheap"
 #algorithms="oyamaqueuecom"
-algorithms="smartqueue"
+algorithms="smartqueue smartskiplist smartpairheap"
+#algorithms="heartbeat lazycounter"
 
 #the setting to use for the flat combining scancount parameter
 #use 0 if you want it to be nthreads
@@ -64,6 +65,10 @@ syncintervals="0"
 dedicated="1"
 addops="1"
 removeops="99"
+#use these for monitor benchmarks
+#dedicated="1"
+#addops="0"
+#removeops="99"
 #use these for random insert / delete from all threads
 #dedicated="0"
 #addops="50"
