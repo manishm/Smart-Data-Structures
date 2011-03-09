@@ -81,6 +81,7 @@ public:
                 //there is one counter per cacheline so atomic ops are not needed
 	        tid = _concurrent ? tid : 0;
 	        _counters[tid * CACHE_LINE_SIZE / sizeof(_u64)] += iAmt;
+		//std::cerr << "i'm here" << std::endl;
 	}
 
         inline void reset(int tid)

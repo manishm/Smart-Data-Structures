@@ -24,6 +24,7 @@
 
 #include "FCBase.h"
 
+#if 0
 template<> volatile int FCBase<FCIntPtr>::_num_post_read_write = 800;
 template<> int          FCBase<FCIntPtr>::_num_passes = 14;
 template<> int          FCBase<FCIntPtr>::_sync_interval = 0;
@@ -31,4 +32,6 @@ template<> int          FCBase<FCIntPtr>::_enable_scancount_tuning = 1;
 template<> int          FCBase<FCIntPtr>::_enable_lock_scheduling = 0;
 template<> int          FCBase<FCIntPtr>::_dynamic_work_size = 0;
 template<> int          FCBase<FCIntPtr>::_dynamic_work_intervals = 0;
+#endif
+
 

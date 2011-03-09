@@ -57,6 +57,7 @@ public:
         int     _dynamic_work_intervals;
 
         float   _rl_to_sleepidle_ratio;
+        int     _internal_reward_mode;
 
         //..................................................
         bool read() {
@@ -67,9 +68,9 @@ public:
                                               &_test_no, &_no_of_threads, &_add_ops, &_remove_ops, &_load_factor, &_capacity, &_throughput_time, 
                                               &_is_dedicated_mode, &_tm_status, &_read_write_delay, &_fc_passes, &_barrier_interval, 
                                               &_scancount_tuning, &_lock_scheduling, &_dynamic_work_size, &_dynamic_work_intervals,
-                                              &_rl_to_sleepidle_ratio );
+                                              &_rl_to_sleepidle_ratio, &_internal_reward_mode );
 
-                        return (25 == num_read);
+                        return (26 == num_read);
                 } catch (...) {
                         return false;
                 }
@@ -106,6 +107,7 @@ public:
                         _dynamic_work_size      = CCP::Integer::parseInt(argv[curr_arg++]);
                         _dynamic_work_intervals = CCP::Integer::parseInt(argv[curr_arg++]);
                         _rl_to_sleepidle_ratio  = (float)atof(argv[curr_arg++]);
+                        _internal_reward_mode   = CCP::Integer::parseInt(argv[curr_arg++]);
 
                         return true;
                 } catch (...) {

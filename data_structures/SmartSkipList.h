@@ -88,6 +88,7 @@ protected://Flat Combining fields
         Node*                      _saved_node_ptr[1024];
         Monitor*                   _mon;
         LearningEngine*            _learner;
+        bool                       _autoreward;
         int                        _sc_tune_id;
 
 protected://methods
@@ -246,7 +247,7 @@ protected://methods
                         }
                 }
 
-                if ( num_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
+                if ( _autoreward && num_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
 		        _mon->addreward(iThread, num_changes);
 
 
@@ -274,13 +275,14 @@ protected://methods
 
 public://methods
 
-        SmartSkipList(Monitor* mon, LearningEngine* learner)
+        SmartSkipList(Monitor* mon, LearningEngine* learner, bool autoreward = true)
         : _head( Node::getNewNode(new PtrNode<T>(FCBase<T>::_MIN_INT, null)) ),
           _tail( Node::getNewNode(new PtrNode<T>(FCBase<T>::_MAX_INT, null)) ),
           _NUM_REP( Math::Min(2, FCBase<T>::_NUM_THREADS)),
           _REP_THRESHOLD((int)(Math::ceil(FCBase<T>::_NUM_THREADS/(1.7)))),
           _mon(mon),
-          _learner(learner)
+          _learner(learner),
+          _autoreward(autoreward)
         {
                 //initialize head to point to tail .....................................
                 for (int iLevel = 0; iLevel < _head->_top_level; ++iLevel)
@@ -292,8 +294,7 @@ public://methods
 
                 _fc_lock = new SmartLockLite<FCIntPtr>(FCBase<T>::_NUM_THREADS, _learner);
 
-                if ( null == _mon )
-		        _mon = new Hb(false);
+		//std::cerr << "internal reward=" << autoreward << std::endl;
 
                 Memory::read_write_barrier();
         }

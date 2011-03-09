@@ -30,17 +30,24 @@
 delays="6400 3200 1600 800 400 200 100"
 #delays="400 200 100"
 #delays="800"
-#delays="12800 6400 3200 1600 800 400 200 100"
+#use for heartbeats benchmarks
+#delays="7000 3500 2333 1750 1400 1167 1000"
+#use for lazycounter benchmarks
+#delays="6400 3200 1600 800 400 200 100"
 
 #sets the level of concurrency 
 #threads="2 4 6 8 10 12 14"
 threads="14"
+#use for monitor benchmarks
+#threads="15"
 
 #which algorithms to benchmark
 #algorithms="fcqueue fcskiplist fcpairheap smartqueue smartskiplist smartpairheap msqueue basketsqueue ctqueue lfskiplist lazyskiplist fcstack lfstack elstack"
 #algorithms="smartqueue smartskiplist smartpairheap"
-#algorithms="oyamaqueuecom"
+#algorithms="smartskiplist"
 algorithms="smartqueue smartskiplist smartpairheap"
+#use for monitor benchmarks
+#algorithms="heartbeat"
 #algorithms="heartbeat lazycounter"
 
 #the setting to use for the flat combining scancount parameter
@@ -91,13 +98,9 @@ lockscheduling="0"
 
 #configure to simulate slowdown of rl thread 
 #rltime / totaltime
-#rltosleepidleratios="1.0 .5 .25 .125 .0625 .03125 .015625"
+#rltosleepidleratios="1.0 .25 .0625 .015625 .00390625 .000976562 .000244141"
 #rltosleepidleratios=".03125 .015625"
-#rltosleepidleratios="1.0"
 rltosleepidleratios="1.0"
-
-#how many trials of each experiment to perform
-reps="0 1 2 3 4 5 6 7 8 9"
 
 #how many data structures to instantiate
 #normal
@@ -106,6 +109,13 @@ numds="1"
 #numds="1 2 4 8 16"
 #numds="2 4 8 16"
 
+#configure whether to use internal or external reward
+#internalreward="1"
+#use this for app-specific reward
+internalreward="1"
+
+#how many trials of each experiment to perform
+reps="0 1 2 3 4 5 6 7 8 9"
 
 #misc parameters
 test="TIME"
@@ -136,9 +146,9 @@ for rltosleepidleratio in $rltosleepidleratios; do
 
         line=""
 	if [ "$scancount" = "0" ]; then
-                 line="$algorithm $num non 0 non 0 non 0 $count $thread $addops $removeops 0.0 $capacity 10 $dedicated 0 $delay $thread $syncinterval $scancounttuning $lockscheduling $dynamicworkamt $interval $rltosleepidleratio"
+                 line="$algorithm $num non 0 non 0 non 0 $count $thread $addops $removeops 0.0 $capacity 10 $dedicated 0 $delay $thread $syncinterval $scancounttuning $lockscheduling $dynamicworkamt $interval $rltosleepidleratio $internalreward"
 	else
-                 line="$algorithm $num non 0 non 0 non 0 $count $thread $addops $removeops 0.0 $capacity 10 $dedicated 0 $delay $scancount $syncinterval $scancounttuning $lockscheduling $dynamicworkamt $interval $rltosleepidleratio"
+                 line="$algorithm $num non 0 non 0 non 0 $count $thread $addops $removeops 0.0 $capacity 10 $dedicated 0 $delay $scancount $syncinterval $scancounttuning $lockscheduling $dynamicworkamt $interval $rltosleepidleratio $internalreward"
 	fi
 
         for rep in $reps; do

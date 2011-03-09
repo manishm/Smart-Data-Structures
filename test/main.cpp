@@ -4,7 +4,7 @@
 //           Ms.Moran Tzafrir  email: morantza@gmail.com
 // Written : 16 February 2011, 13 October 2009
 // 
-// Multi-Platform C++ framework example benchamrk programm
+// Multi-Platform C++ framework example benchamrk program
 //
 // Copyright (C) 2011 Jonathan Eastep, 2009 Moran Tzafrir.
 //
@@ -179,7 +179,8 @@ public:
                                                 iNumAdd=0;
                                 }
                                 ++action_counter;
-                                //_mon->heartbeat();
+                                if ( 0 == _gConfiguration._internal_reward_mode )
+				        _mon->addreward(_threadNo, _num_ds);
                         } else if(2==op) {
                                 for (int iDb=0; iDb<_num_ds; ++iDb) {
                                         *n = FCIntPtrNode( _gRandNumAry[iNumRemove] );
@@ -188,7 +189,8 @@ public:
                                         if(iNumRemove >= _gTotalRandNum) { iNumRemove=0; }
                                 }
                                 ++action_counter;
-                                //_mon->heartbeat();
+                                if ( 0 == _gConfiguration._internal_reward_mode )
+				        _mon->addreward(_threadNo, _num_ds);
                         } else {
                                 for (int iDb=0; iDb<_num_ds; ++iDb) {
                                         *n = FCIntPtrNode( _gRandNumAry[iNumContain] );
@@ -197,7 +199,8 @@ public:
                                         if(iNumContain >= _gTotalRandNum) {     iNumContain=0; }
                                 }
                                 ++action_counter;
-                                //_mon->heartbeat();
+                                if ( 0 == _gConfiguration._internal_reward_mode )
+				        _mon->addreward(_threadNo, _num_ds);
                         }
 
                         ++iOp;
@@ -266,7 +269,8 @@ public:
                                 iNumAdd=0;
 			//}
                         ++action_counter;
-                        //_mon->heartbeat();
+                        if ( 0 == _gConfiguration._internal_reward_mode )
+				_mon->addreward(_threadNo, 1);
 
                         /*
                         if (_gConfiguration._read_write_delay > 0) {
@@ -328,7 +332,8 @@ public:
                                 if(iNumRemove >= _gTotalRandNum) { iNumRemove=0; }
 			//}
                         ++action_counter;
-                        //_mon->heartbeat();
+                        if ( 0 == _gConfiguration._internal_reward_mode )
+				_mon->addreward(_threadNo, 1);
 
                         if (_gConfiguration._read_write_delay > 0) {
                                 _gDS[0]->post_computation(_threadNo);
@@ -393,7 +398,8 @@ public:
                                 if(iNumContain >= _gTotalRandNum) {     iNumContain=0; }
 		        //}
                         ++action_counter;
-                        //_mon->heartbeat();
+                        if ( 0 == _gConfiguration._internal_reward_mode )
+				_mon->addreward(_threadNo, 1);
 
                         if (_gConfiguration._read_write_delay > 0) {
                                 _gDS[0]->post_computation(_threadNo);
@@ -441,7 +447,7 @@ int main(int argc, char **argv) {
 
         //initialize global variables ..............................................
         int tmp = _gConfiguration._alg1_num + _gConfiguration._alg2_num + _gConfiguration._alg3_num + _gConfiguration._alg4_num;
-        bool concurrent = tmp != 1;
+        bool concurrent = (tmp != 1) || (0 == _gConfiguration._internal_reward_mode);
 
         _gNumProcessors     = 1; //Runtime.getRuntime().availableProcessors();
         _gNumThreads        = _gConfiguration._no_of_threads;
@@ -449,8 +455,8 @@ int main(int argc, char **argv) {
         _gTotalRandNum      = Math::Max(_gConfiguration._capacity, 4*1024*1024);
         _gThroughputTime    = _gConfiguration._throughput_time;
 
-        //_mon = new Hb(concurrent);
-        _mon = new LazyCounter(_gNumThreads, concurrent);
+        _mon = new Hb(concurrent);
+        //_mon = new LazyCounter(_gNumThreads, concurrent);
 
         //prepare the random numbers ...............................................
         System_err_println("");
@@ -517,6 +523,7 @@ void RunBenchmark() {
         System_err_println("    lock_scheduling:        " + Integer::toString(_gConfiguration._lock_scheduling));
         System_err_println("    dynamic_work_size:      " + Integer::toString(_gConfiguration._dynamic_work_size));
         System_err_println("    dynamic_work_intervals: " + Integer::toString(_gConfiguration._dynamic_work_intervals));
+        System_err_println("    internal_reward_mode:   " + Integer::toString(_gConfiguration._internal_reward_mode));
 
         _is_view = (0 != _gConfiguration._tm_status);
 
@@ -752,7 +759,7 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* lear
                 return (new FCQueue<FCIntPtr>());
         }
         if(0 == strcmp(alg_name, "smartqueue")) {
-                return (new SmartQueue<FCIntPtr>(_mon, learner));
+	        return (new SmartQueue<FCIntPtr>(_mon, learner, (0 != _gConfiguration._internal_reward_mode) ));
         }
         if(0 == strcmp(alg_name, "msqueue")) {
                 return (new MSQueue<FCIntPtr>());
@@ -777,7 +784,7 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* lear
                 return (new FCSkipList<FCIntPtr>());
         }
         if(0 == strcmp(alg_name, "smartskiplist")) {
-                return (new SmartSkipList<FCIntPtr>(_mon, learner));
+	        return (new SmartSkipList<FCIntPtr>(_mon, learner, (0 != _gConfiguration._internal_reward_mode) ));
         }
         if(0 == strcmp(alg_name, "lfskiplist")) {
                 return (new LFSkipList<FCIntPtr>());
@@ -791,7 +798,7 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* lear
                 return (new FCPairHeap<FCIntPtr>());
         }
         if(0 == strcmp(alg_name, "smartpairheap")) {
-                return (new SmartPairHeap<FCIntPtr>(_mon, learner));
+	        return (new SmartPairHeap<FCIntPtr>(_mon, learner, (0 != _gConfiguration._internal_reward_mode) ));
         }
 
         //stack ....................................................................

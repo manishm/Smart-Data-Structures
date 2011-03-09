@@ -56,6 +56,7 @@ private:
         Monitor*                  _mon;
         LearningEngine*           _learner;
         int                       _sc_tune_id;
+        bool                      _autoreward;
 
         //helper function -----------------------------
         inline_ void flat_combining(final int iThread) {
@@ -92,21 +93,24 @@ private:
                         }//while on slots
 
                         total_changes += num_changes;
+                        //if ( _autoreward && num_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
+		        //        _mon->addreward(iThread, num_changes);
 
 		}//for repetition
 
-                if ( total_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
+                if ( _autoreward && total_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
 		        _mon->addreward(iThread, total_changes);
 
         }       
         
 public:
 
-        SmartPairHeap(Monitor* mon, LearningEngine* learner)
+        SmartPairHeap(Monitor* mon, LearningEngine* learner, bool autoreward = true)
         :       _NUM_REP(FCBase<T>::_NUM_THREADS),
                 _REP_THRESHOLD((int)(Math::ceil(FCBase<T>::_NUM_THREADS/(1.7)))),
 	        _mon(mon),
-	        _learner(learner)
+	        _learner(learner),
+	        _autoreward(autoreward)
         {
                 _sc_tune_id = 0;
                 if ( 0 != FCBase<T>::_enable_scancount_tuning )
@@ -114,8 +118,7 @@ public:
 
                 _fc_lock = new SmartLockLite<FCIntPtr>(FCBase<T>::_NUM_THREADS, _learner);
 
-                if ( null == _mon )
-		        _mon = new Hb(false);
+		//std::cerr << "internal reward=" << autoreward << std::endl;
 
                 Memory::read_write_barrier();
         }

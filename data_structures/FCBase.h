@@ -344,4 +344,14 @@ public:
 };
 
 
+// default values
+template<class T> volatile int FCBase<T>::_num_post_read_write = 800;
+template<class T> int          FCBase<T>::_num_passes = 14;
+template<class T> int          FCBase<T>::_sync_interval = 0;
+template<class T> int          FCBase<T>::_enable_scancount_tuning = 1;
+template<class T> int          FCBase<T>::_enable_lock_scheduling = 0;
+template<class T> int          FCBase<T>::_dynamic_work_size = 0;
+template<class T> int          FCBase<T>::_dynamic_work_intervals = 0;
+
+
 #endif
