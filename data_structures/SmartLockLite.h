@@ -142,27 +142,30 @@ public:
                 //an alternative implementation reserves bits [62:48] from fastprlock and uses [55:48] as the deqtkt
                 //the unlock operation can then do fad of 0x8001 to bits [63:48] to inc deqtkt and release lock together
                 const _u64 lockbit = (U64(1) << 63);
-                mytkt = FAADD(enqtkt,1);
-                bool gotabort = false;
-                while( *deqtkt != mytkt ) {
-                        gotabort = (*ptr != val);
-                }
-                if ( gotabort ) {
-                        *deqtkt = mytkt + 1;
-                        return false;
-                } else {
-                while(true) {
-                        _u64 tmp = *fastprlock;
-                        if ( lockbit > tmp ) {
-                                if ( CAS(fastprlock, tmp, tmp | lockbit)) )
-                                        return true;
+                do {
+                        mytkt = FAADD(enqtkt,1);
+                        _u64 thetkt;
+                        do {
+			        thetkt = *deqtkt;
+                                if ( *ptr != val ) {
+                                        FASTORE(fastprlock, mytkt+1);
+                                        return false;
+                                }
+                        } while(thetkt < mytkt);
+
+                        if ( thetkt == mytkt ) {
+                                _u64 tmp = *fastprlock;
+				if ( lockbit > tmp ) {
+                                        if ( CAS(fastprlock, tmp, tmp | lockbit) )
+                                                return true;
                                 }
                         }
-                }
+
+                } while(true);                        
         }
         void unlock_ttas()
         {
-                *deqtkt = mytkt + 1;
+                FASTORE(deqtkt, mytkt+1);
                 FAAND(fastprlock, ~(U64(1)<<63));
         } 
         */

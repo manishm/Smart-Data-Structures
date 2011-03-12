@@ -6,14 +6,15 @@ TSP             = tsp_intel64
 CPP		= g++
 
 INCFLAGS        = -Idata_structures -Iframework -Imonitor -Irl_engine -Irl_engine/Seldon-5.0.1
-DEFFLAGS        = -DINTEL64 -D_REENTRANT -DSMARTQUEUE
+TSPFLAGS        = -DSMARTQUEUE
+DEFFLAGS        = -DINTEL64 -D_REENTRANT
 CPPFLAGS	= -MD -O3 -m64 $(INCFLAGS) $(DEFFLAGS) -lrt -pthread -llapack
 LFLAGS		= -O3 -m64 $(DEFFLAGS) -lrt -pthread -llapack
 
 OBJS		= $(CPPSRCS:.cpp=.o)
 REGRESSOBJS     = $(subst main,regress,$(OBJS)) 
 TSPOBJS         = $(subst main,tsp,$(OBJS))
-DEPS            = $(CPPSRCS:.cpp=.d) regress.d
+DEPS            = $(CPPSRCS:.cpp=.d) regress.d tsp.d
 
 all: $(TARGET)
 
@@ -24,7 +25,7 @@ regress.o:
 	$(CPP) $(CPPFLAGS) -c ./test/regress.cpp
 
 tsp.o:
-	$(CPP) $(CPPFLAGS) -c ./test/tsp.cpp
+	$(CPP) $(CPPFLAGS) $(TSPFLAGS) -c ./test/tsp.cpp
 
 cpp_framework.o:
 	$(CPP) $(CPPFLAGS) -c ./framework/cpp_framework.cpp
@@ -45,9 +46,9 @@ $(REGRESS): $(REGRESSOBJS)
 	$(CPP) $(LFLAGS) $(REGRESSOBJS) -o $(REGRESS)
 
 $(TSP): $(TSPOBJS)
-	$(CPP) $(LFLAGS) $(TSPOBJS) -o $(TSP)
+	$(CPP) $(LFLAGS) $(TSPFLAGS) $(TSPOBJS) -o $(TSP)
 
 clean:
-	rm -f $(DEPS) $(OBJS) $(REGRESSOBJS) $(TARGET) $(REGRESS)
+	rm -f $(DEPS) $(OBJS) $(REGRESSOBJS) $(TSPOBJS) $(TARGET) $(REGRESS) $(TSP)
 
 -include $(DEPS)

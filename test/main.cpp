@@ -109,9 +109,9 @@ static boolean                          _is_view=false;
 static Monitor*                         _mon;
 
 static final int                        _num_work_amts             = 10;
-//static int                            _work_amts[_num_work_amts] = {800, 6400, 200, 3200, 1600, 100, 400, 100, 400, 800};
+static int                            _work_amts[_num_work_amts] = {800, 6400, 200, 3200, 1600, 100, 400, 100, 400, 800};
 //static int                            _work_amts[_num_work_amts] = {1600, 200, 400, 1600, 200, 1600, 3200, 100, 200, 800};
-static int                              _work_amts[_num_work_amts] = {800, 100, 6400, 200, 200, 100, 400, 800, 3200, 400};
+//static int                              _work_amts[_num_work_amts] = {800, 100, 6400, 200, 200, 100, 400, 800, 3200, 400};
 //static int                            _work_amts[_num_work_amts] = {400, 200, 400, 200, 400, 200, 400, 200, 400, 200};
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -686,13 +686,16 @@ void RunBenchmark() {
                 Thread::yield();
                 Thread::sleep(_gThroughputTime*1000);
         } else {
+	        assert( FCBase<FCIntPtr>::_dynamic_work_intervals > 10 );
                 Thread::yield();
-                Thread::sleep(_gThroughputTime*1000/FCBase<FCIntPtr>::_dynamic_work_intervals);
+                //Thread::sleep(0, _gThroughputTime * (1000000000 / FCBase<FCIntPtr>::_dynamic_work_intervals));
+		Thread::delay(_gThroughputTime * (1000000000 / FCBase<FCIntPtr>::_dynamic_work_intervals));
 
                 for(int i=1; i<FCBase<FCIntPtr>::_dynamic_work_intervals; ++i) {
                         for(int j=0; j<_num_ds; ++j)
-                                _gDS[j]->_num_post_read_write = _work_amts[i%_num_work_amts];    
-                        Thread::sleep(_gThroughputTime*1000/FCBase<FCIntPtr>::_dynamic_work_intervals);
+                                _gDS[j]->_num_post_read_write = _work_amts[i%_num_work_amts];
+                        //Thread::sleep(0, _gThroughputTime * (1000000000 / FCBase<FCIntPtr>::_dynamic_work_intervals));
+ 		        Thread::delay(_gThroughputTime * (1000000000 / FCBase<FCIntPtr>::_dynamic_work_intervals));
                 }
         }
         _gIsStopThreads = 1;

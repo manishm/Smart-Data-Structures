@@ -42,10 +42,10 @@ threads="14"
 #threads="15"
 
 #which algorithms to benchmark
-#algorithms="fcqueue fcskiplist fcpairheap smartqueue smartskiplist smartpairheap msqueue basketsqueue ctqueue lfskiplist lazyskiplist fcstack lfstack elstack"
+algorithms="fcqueue fcskiplist fcpairheap smartqueue smartskiplist smartpairheap msqueue basketsqueue basketsqueue oyqueue oyqueuecom lfskiplist lazyskiplist"
 #algorithms="smartqueue smartskiplist smartpairheap"
 #algorithms="smartskiplist"
-algorithms="smartqueue smartskiplist smartpairheap"
+#algorithms="smartqueue smartskiplist smartpairheap"
 #use for monitor benchmarks
 #algorithms="heartbeat"
 #algorithms="heartbeat lazycounter"
@@ -81,9 +81,11 @@ removeops="99"
 #addops="50"
 #removeops="50"
 
-#configure this to have a changing amount of postcomputation work
+#configure this to have a changing amount of postcomputation work (in ns)
 #dynamicworkamt="1"
 #dynamicworkintervals="1 10 100 1000 10000"
+#dynamicworkintervals="1000 10000 100000 1000000 10000000"
+#dynamicworkintervals="1000000"
 #use this for none
 dynamicworkamt="0"
 dynamicworkintervals="0"
