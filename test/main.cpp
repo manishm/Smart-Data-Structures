@@ -538,8 +538,6 @@ void RunBenchmark() {
         FCBase<FCIntPtr>::_num_post_read_write = _gConfiguration._read_write_delay;
         FCBase<FCIntPtr>::_num_passes = _gConfiguration._fc_passes;
         FCBase<FCIntPtr>::_sync_interval = _gConfiguration._barrier_interval;
-        FCBase<FCIntPtr>::_enable_scancount_tuning = _gConfiguration._scancount_tuning;
-        FCBase<FCIntPtr>::_enable_lock_scheduling = _gConfiguration._lock_scheduling; 
         FCBase<FCIntPtr>::_dynamic_work_size = _gConfiguration._dynamic_work_size;
         FCBase<FCIntPtr>::_dynamic_work_intervals = _gConfiguration._dynamic_work_intervals;
 
@@ -759,10 +757,13 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* lear
 
         //queue ....................................................................
         if(0 == strcmp(alg_name, "fcqueue")) {
-                return (new FCQueue<FCIntPtr>());
+	        return (new SmartQueue<FCIntPtr,false,false>(null, null));
         }
         if(0 == strcmp(alg_name, "smartqueue")) {
-	        return (new SmartQueue<FCIntPtr>(_mon, learner, (0 != _gConfiguration._internal_reward_mode) ));
+	        if ( 0 != _gConfiguration._internal_reward_mode ) 
+	                return (new SmartQueue<FCIntPtr,true,true>(_mon, learner));
+		else
+		        return (new SmartQueue<FCIntPtr,true,false>(_mon, learner));
         }
         if(0 == strcmp(alg_name, "msqueue")) {
                 return (new MSQueue<FCIntPtr>());
@@ -775,7 +776,7 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* lear
         //        return (new ComTreeQueue<FCIntPtr>());
         //}
         if(0 == strcmp(alg_name, "oyqueue")) {
-                  return (new OyamaQueue<FCIntPtr>());
+                return (new OyamaQueue<FCIntPtr>());
         }
         //not working yet
         //if(0 == strcmp(alg_name, "oyqueuecom")) {
@@ -784,10 +785,13 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* lear
 
         //skiplist .................................................................
         if(0 == strcmp(alg_name, "fcskiplist")) {
-                return (new FCSkipList<FCIntPtr>());
+	        return (new SmartSkipList<FCIntPtr,false,false>(null, null));
         }
         if(0 == strcmp(alg_name, "smartskiplist")) {
-	        return (new SmartSkipList<FCIntPtr>(_mon, learner, (0 != _gConfiguration._internal_reward_mode) ));
+	        if ( 0 != _gConfiguration._internal_reward_mode ) 
+	                return (new SmartSkipList<FCIntPtr,true,true>(_mon, learner));
+		else
+		        return (new SmartSkipList<FCIntPtr,true,false>(_mon, learner));
         }
         if(0 == strcmp(alg_name, "lfskiplist")) {
                 return (new LFSkipList<FCIntPtr>());
@@ -798,10 +802,13 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* lear
 
         //pairing heaps.............................................................
         if(0 == strcmp(alg_name, "fcpairheap")) {
-                return (new FCPairHeap<FCIntPtr>());
+	        return (new SmartPairHeap<FCIntPtr,false,false>(null, null));
         }
         if(0 == strcmp(alg_name, "smartpairheap")) {
-	        return (new SmartPairHeap<FCIntPtr>(_mon, learner, (0 != _gConfiguration._internal_reward_mode) ));
+	        if ( 0 != _gConfiguration._internal_reward_mode ) 
+	                return (new SmartPairHeap<FCIntPtr,true,true>(_mon, learner));
+		else
+		        return (new SmartPairHeap<FCIntPtr,true,false>(_mon, learner));
         }
 
         //stack ....................................................................

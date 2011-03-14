@@ -30,7 +30,7 @@
 #include "cpp_framework.h"
 #include "FCBase.h"
 
-//#define FCCASSTATS
+//#define _FC_CAS_STATS
 
 
 using namespace CCP;
@@ -43,8 +43,8 @@ private:
 
         //inner classes -------------------------------
         struct Node {
-                Node* volatile          _next;
-                FCIntPtr volatile       _values[256];
+                Node* volatile     _next;
+                FCIntPtr volatile  _values[256];
 
                 static Node* get_new(final int in_num_values) {
                         final size_t new_size = (sizeof(Node) + (in_num_values + 2 - 256) * sizeof(FCIntPtr));
@@ -88,7 +88,7 @@ private:
                 for (int iTry=0;iTry<_NUM_REP; ++iTry) {
                         //Memory::read_barrier();
 
-                        int num_changes=0;
+                        int num_changes = 0;
                         SlotInfo* curr_slot = FCBase<T>::_tail_slot.get();
                         while(null != curr_slot->_next) {
                                 final FCIntPtr curr_value = curr_slot->_req_ans;
@@ -193,7 +193,7 @@ public:
 
                         boolean is_cas = true;
                         if(lock_fc(_fc_lock, is_cas)) {
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                 ++(my_cas_info._succ);
 #endif
                                 ++(my_cas_info._locks);
@@ -201,13 +201,13 @@ public:
                                 flat_combining();
                                 _fc_lock.set(0);
                                 FCBase<T>::machine_end_fc(iThread);
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                 ++(my_cas_info._ops);
 #endif
                                 return true;
                         } else {
                                 //Memory::write_barrier();
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                 if(!is_cas)
                                         ++(my_cas_info._failed);
 #endif
@@ -216,7 +216,7 @@ public:
                                 } 
                                 //Memory::read_barrier();
                                 if(FCBase<T>::_NULL_VALUE == *my_re_ans) {
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                         ++(my_cas_info._ops);
 #endif
                                         return true;
@@ -246,7 +246,7 @@ public:
 
                         boolean is_cas = true;
                         if(lock_fc(_fc_lock, is_cas)) {
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                 ++(my_cas_info._succ);
 #endif
                                 ++(my_cas_info._locks);
@@ -254,13 +254,13 @@ public:
                                 flat_combining();
                                 _fc_lock.set(0);
                                 FCBase<T>::machine_end_fc(iThread);
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                 ++(my_cas_info._ops);
 #endif
                                 return (PtrNode<T>*) -(*my_re_ans);
                         } else {
                                 //Memory::write_barrier();
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                 if(!is_cas)
                                         ++(my_cas_info._failed);
 #endif
@@ -269,7 +269,7 @@ public:
                                 }
                                 //Memory::read_barrier();
                                 if(FCBase<T>::_DEQ_VALUE != *my_re_ans) {
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                         ++(my_cas_info._ops);
 #endif
                                         return (PtrNode<T>*) -(*my_re_ans);

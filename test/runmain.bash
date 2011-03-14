@@ -42,7 +42,8 @@ threads="14"
 #threads="15"
 
 #which algorithms to benchmark
-algorithms="fcqueue fcskiplist fcpairheap smartqueue smartskiplist smartpairheap msqueue basketsqueue basketsqueue oyqueue oyqueuecom lfskiplist lazyskiplist"
+#algorithms="fcqueue fcskiplist fcpairheap smartqueue smartskiplist smartpairheap msqueue basketsqueue basketsqueue oyqueue oyqueuecom lfskiplist lazyskiplist"
+algorithms="fcqueue smartqueue"
 #algorithms="smartqueue smartskiplist smartpairheap"
 #algorithms="smartskiplist"
 #algorithms="smartqueue smartskiplist smartpairheap"

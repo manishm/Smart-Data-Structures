@@ -33,9 +33,13 @@
 #include "Heartbeat.h"
 #include "Monitor.h"
 
+//#define _USE_SMARTLOCK
+//#define _FC_CAS_STATS
+
+
 using namespace CCP;
 
-template <class T>
+template <class T, bool _AUTO_TUNE = true, bool _AUTO_REWARD = true>
 class SmartSkipList : public FCBase<T> { 
 protected://consts
         static final int _MAX_LEVEL     = 20;
@@ -78,7 +82,11 @@ protected://SkipList fields
 
 protected://Flat Combining fields
 
+#ifdef _USE_SMARTLOCK
         SmartLockLite<FCIntPtr>*   _fc_lock;
+#else
+        AtomicInteger              _fc_lock;
+#endif
         char                       _pad1[CACHE_LINE_SIZE];
         final int                  _NUM_REP;
         final int                  _REP_THRESHOLD;
@@ -88,7 +96,6 @@ protected://Flat Combining fields
         Node*                      _saved_node_ptr[1024];
         Monitor*                   _mon;
         LearningEngine*            _learner;
-        bool                       _autoreward;
         int                        _sc_tune_id;
 
 protected://methods
@@ -145,7 +152,7 @@ protected://methods
                 final int top_level = randomLevel();  
 
                 int maxPasses;
-                if ( 0 == FCBase<T>::_enable_scancount_tuning )
+                if ( !_AUTO_TUNE )
                         maxPasses = FCBase<T>::_num_passes;
                 else
 		        maxPasses = 1 + 4*_learner->getdiscval(_sc_tune_id, iThread);
@@ -247,7 +254,7 @@ protected://methods
                         }
                 }
 
-                if ( _autoreward && num_changes && (FCBase<T>::_enable_scancount_tuning || FCBase<T>::_enable_lock_scheduling) )
+                if ( _AUTO_REWARD )
 		        _mon->addreward(iThread, num_changes);
 
 
@@ -275,36 +282,40 @@ protected://methods
 
 public://methods
 
-        SmartSkipList(Monitor* mon, LearningEngine* learner, bool autoreward = true)
+        SmartSkipList(Monitor* mon, LearningEngine* learner)
         : _head( Node::getNewNode(new PtrNode<T>(FCBase<T>::_MIN_INT, null)) ),
           _tail( Node::getNewNode(new PtrNode<T>(FCBase<T>::_MAX_INT, null)) ),
           _NUM_REP( Math::Min(2, FCBase<T>::_NUM_THREADS)),
           _REP_THRESHOLD((int)(Math::ceil(FCBase<T>::_NUM_THREADS/(1.7)))),
           _mon(mon),
-          _learner(learner),
-          _autoreward(autoreward)
+          _learner(learner)
         {
                 //initialize head to point to tail .....................................
                 for (int iLevel = 0; iLevel < _head->_top_level; ++iLevel)
                         _head->_next[iLevel] = _tail;
 
                 _sc_tune_id = 0;
-                if ( 0 != FCBase<T>::_enable_scancount_tuning )
+                if ( _AUTO_TUNE )
                         _sc_tune_id = _learner->register_sc_tune_id();
 
+#ifdef _USE_SMARTLOCK
                 _fc_lock = new SmartLockLite<FCIntPtr>(FCBase<T>::_NUM_THREADS, _learner);
-
-		//std::cerr << "internal reward=" << autoreward << std::endl;
+#endif
 
                 Memory::read_write_barrier();
         }
 
         virtual ~SmartSkipList() 
         {
+#ifdef _USE_SMARTLOCK
                 delete _fc_lock;
+#endif
         }
 
 public://methods
+
+
+#ifdef _USE_SMARTLOCK
 
         //abort semaphore version
         //deq ......................................................
@@ -365,6 +376,116 @@ public://methods
                 return (PtrNode<T>*) -(*my_re_ans);
         }
 
+#else
+
+        //deq ......................................................
+        boolean add(final int iThread, PtrNode<T>* final inPtr) {
+                final FCIntPtr inValue = (FCIntPtr) inPtr;
+                CasInfo& my_cas_info = FCBase<T>::_cas_info_ary[iThread];
+
+                SlotInfo* my_slot = FCBase<T>::_tls_slot_info.get();
+                if(null == my_slot)
+                        my_slot = FCBase<T>::get_new_slot();
+
+                SlotInfo* volatile&     my_next = my_slot->_next;
+                FCIntPtr volatile& my_re_ans = my_slot->_req_ans;
+                my_re_ans = inValue;
+
+                do {
+                        //this is needed because the combiner may remove you
+                        if (null == my_next)
+                                FCBase<T>::enq_slot(my_slot);
+
+                        boolean is_cas = false;
+                        if(lock_fc(_fc_lock, is_cas)) {
+#ifdef _FC_CAS_STATS
+                                ++(my_cas_info._succ);
+#endif
+                                ++(my_cas_info._locks);
+                                FCBase<T>::machine_start_fc(iThread);
+                                flat_combining(iThread);
+                                _fc_lock.set(0);
+                                FCBase<T>::machine_end_fc(iThread);
+#ifdef _FC_CAS_STATS
+                                ++(my_cas_info._ops);
+#endif
+                                return true;
+                        } else {
+                                Memory::write_barrier();
+#ifdef _FC_CAS_STATS
+                                if(!is_cas)
+                                        ++(my_cas_info._failed);
+#endif
+                                while(FCBase<T>::_NULL_VALUE != my_re_ans && 0 != _fc_lock.getNotSafe()) {
+                                        FCBase<T>::thread_wait(iThread);
+                                } 
+                                Memory::read_barrier();
+                                if(FCBase<T>::_NULL_VALUE == my_re_ans) {
+#ifdef _FC_CAS_STATS
+                                        ++(my_cas_info._ops);
+#endif
+                                        return true;
+                                }
+                        }
+                } while(true);
+        }
+
+        //deq ......................................................
+        PtrNode<T>* remove(final int iThread, PtrNode<T>* final inPtr) {
+                final FCIntPtr inValue = (FCIntPtr) inPtr;
+                CasInfo& my_cas_info = FCBase<T>::_cas_info_ary[iThread];
+
+                SlotInfo* my_slot = FCBase<T>::_tls_slot_info.get();
+                if(null == my_slot)
+                        my_slot = FCBase<T>::get_new_slot();
+
+                SlotInfo* volatile&     my_next = my_slot->_next;
+                FCIntPtr volatile& my_re_ans = my_slot->_req_ans;
+                my_re_ans = FCBase<T>::_DEQ_VALUE;
+
+                do {
+                        //this is needed because the combiner may remove you
+                        if(null == my_next)
+                                FCBase<T>::enq_slot(my_slot);
+
+                        boolean is_cas = false;
+                        if(lock_fc(_fc_lock, is_cas)) {
+#ifdef _FC_CAS_STATS
+                                ++(my_cas_info._succ);
+#endif
+                                ++(my_cas_info._locks);
+                                FCBase<T>::machine_start_fc(iThread);
+                                flat_combining(iThread);
+                                _fc_lock.set(0);
+                                FCBase<T>::machine_end_fc(iThread);
+#ifdef _FC_CAS_STATS
+                                ++(my_cas_info._ops);
+#endif
+                                return (PtrNode<T>*) -(my_re_ans);
+                        } else {
+                                Memory::write_barrier();
+#ifdef _FC_CAS_STATS
+                                if(!is_cas)
+                                        ++(my_cas_info._failed);
+#endif
+                                while(FCBase<T>::_DEQ_VALUE == my_re_ans && 0 != _fc_lock.getNotSafe()) {
+                                        FCBase<T>::thread_wait(iThread);
+                                }
+                                Memory::read_barrier();
+                                if(FCBase<T>::_DEQ_VALUE != my_re_ans) {
+#ifdef _FC_CAS_STATS
+                                        ++(my_cas_info._ops);
+#endif
+                                        return (PtrNode<T>*) -(my_re_ans);
+                                }
+                        }
+                } while(true);
+        }
+
+
+#endif
+
+
         //peek ......................................................................
         PtrNode<T>* contain(final int iThread, PtrNode<T>* final inPtr) {
                 final FCIntPtr inValue = (FCIntPtr) inPtr;
@@ -382,7 +503,9 @@ public://methods
         }
 
         void cas_reset(final int iThread) {
+#ifdef _USE_SMARTLOCK
                 _fc_lock->resetcasops(iThread);
+#endif
                 FCBase<T>::_cas_info_ary[iThread].reset();
         }
 
@@ -398,10 +521,12 @@ public://methods
                         ops += FCBase<T>::_cas_info_ary[i]._ops;
                         locks += FCBase<T>::_cas_info_ary[i]._locks;
                 }
+#ifdef _USE_SMARTLOCK
                 int tmp1 = _fc_lock->getcasops();
                 int tmp2 = _fc_lock->getcasfails();
                 succ += tmp1 - tmp2;
                 failed += tmp2;
+#endif
                 printf(" 0 0 0 0 0 0 ( %d, %d, %d, %d, %d )", ops, locks, succ, failed, failed+succ);
         }
 

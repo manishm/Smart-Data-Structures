@@ -30,7 +30,7 @@
 #include "FCBase.h"
 #include "cpp_framework.h"
 
-//#define FCCASSTATS
+//#define _FC_CAS_STATS
 
 using namespace CCP;
 
@@ -294,7 +294,7 @@ public://methods
 
                         boolean is_cas = false;
                         if(lock_fc(_fc_lock, is_cas)) {
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                 ++(my_cas_info._succ);
 #endif
                                 ++(my_cas_info._locks);
@@ -302,13 +302,13 @@ public://methods
                                 flat_combining();
                                 _fc_lock.set(0);
                                 FCBase<T>::machine_end_fc(iThread);
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                 ++(my_cas_info._ops);
 #endif
                                 return true;
                         } else {
                                 Memory::write_barrier();
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                 if(!is_cas)
                                         ++(my_cas_info._failed);
 #endif
@@ -317,7 +317,7 @@ public://methods
                                 } 
                                 Memory::read_barrier();
                                 if(FCBase<T>::_NULL_VALUE == my_re_ans) {
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                         ++(my_cas_info._ops);
 #endif
                                         return true;
@@ -346,7 +346,7 @@ public://methods
 
                         boolean is_cas = false;
                         if(lock_fc(_fc_lock, is_cas)) {
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                 ++(my_cas_info._succ);
 #endif
                                 ++(my_cas_info._locks);
@@ -354,13 +354,13 @@ public://methods
                                 flat_combining();
                                 _fc_lock.set(0);
                                 FCBase<T>::machine_end_fc(iThread);
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                 ++(my_cas_info._ops);
 #endif
                                 return (PtrNode<T>*) -(my_re_ans);
                         } else {
                                 Memory::write_barrier();
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                 if(!is_cas)
                                         ++(my_cas_info._failed);
 #endif
@@ -369,7 +369,7 @@ public://methods
                                 }
                                 Memory::read_barrier();
                                 if(FCBase<T>::_DEQ_VALUE != my_re_ans) {
-#ifdef FCCASSTATS
+#ifdef _FC_CAS_STATS
                                         ++(my_cas_info._ops);
 #endif
                                         return (PtrNode<T>*) -(my_re_ans);

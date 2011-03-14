@@ -6,7 +6,7 @@ TSP             = tsp_intel64
 CPP		= g++
 
 INCFLAGS        = -Idata_structures -Iframework -Imonitor -Irl_engine -Irl_engine/Seldon-5.0.1
-TSPFLAGS        = -DSMARTQUEUE
+TSPFLAGS        = -DSMARTPAIRHEAP
 DEFFLAGS        = -DINTEL64 -D_REENTRANT
 CPPFLAGS	= -MD -O3 -m64 $(INCFLAGS) $(DEFFLAGS) -lrt -pthread -llapack
 LFLAGS		= -O3 -m64 $(DEFFLAGS) -lrt -pthread -llapack

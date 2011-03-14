@@ -99,8 +99,6 @@ public:
         static volatile int _num_post_read_write       ATTRIBUTE_CACHE_ALIGNED;
         static int          _num_passes;
         static int          _sync_interval;
-        static int          _enable_scancount_tuning;
-        static int          _enable_lock_scheduling;
         static int          _dynamic_work_size;
         static int          _dynamic_work_intervals;
 
@@ -298,7 +296,7 @@ public:
                 if ( _num_post_read_write > 0 )
                 {
 #if 0
-                        //this seems risky given nanosleeps weak guarantees
+                        //this seems risky given nanosleep's weak guarantees
                         //but will be preferable if the guarantees get better
                         CCP::Thread::sleep(0,_num_post_read_write);
 #else
@@ -348,8 +346,6 @@ public:
 template<class T> volatile int FCBase<T>::_num_post_read_write = 800;
 template<class T> int          FCBase<T>::_num_passes = 14;
 template<class T> int          FCBase<T>::_sync_interval = 0;
-template<class T> int          FCBase<T>::_enable_scancount_tuning = 1;
-template<class T> int          FCBase<T>::_enable_lock_scheduling = 0;
 template<class T> int          FCBase<T>::_dynamic_work_size = 0;
 template<class T> int          FCBase<T>::_dynamic_work_intervals = 0;
 
