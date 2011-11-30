@@ -25,20 +25,37 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include <assert.h>
-#include "FCBase.h"
+#include "cpp_framework.h"
+#include "portable_defns.h"
 
 template <typename T>
 class PtrNode {
+
 protected:
-        FCIntPtr  key;
-        T*        value;
+        template<class C> friend class WorkQueueFreeList;
+        template<class C> friend class MutexQueue;
+
+        FCIntPtr     key;
+        T*           value;
+        volatile bool          free;
+        PtrNode<T>*  volatile  next;
 
 public:
-        PtrNode(const FCIntPtr key, T* const value): key(key), value(value) {}
+        PtrNode()
+	: key(0), value(null), free(true)
+	{
+	}
 
-        ~PtrNode() {};
+        PtrNode(const FCIntPtr key, T* const value)
+        : key(key), value(value), free(true) 
+	{
+	        assert( ((FCIntPtr) value) >= 0 );
+        }
 
-        virtual bool operator<(const PtrNode<T>& rhs) const {
+        virtual ~PtrNode() 
+        {};
+
+        bool operator<(const PtrNode<T>& rhs) const {
                 return key < rhs.key;
         }
 
@@ -49,6 +66,23 @@ public:
         T* getvalue() {
                 return value;
         }
+ 
+        void setkey(FCIntPtr k) {
+	        key = k;
+	}
+
+        void setvalue(T* v) {
+	        value = v;
+	}
+
+        void setfree(bool v) {
+	        free = v;
+	}
+
+        bool getfree() {
+	        return free;
+	}
+
 };
 
 class FCIntPtrNode : public PtrNode<FCIntPtr> {
@@ -64,14 +98,227 @@ public:
 
         ~FCIntPtrNode() {}
 
-        FCIntPtr getkey() {
-                return key;
-        }
-
         FCIntPtr getvalue() {
                 return *value;
         }
 };
 
 
+
+template <class T>
+class FreeList  {
+
+private:
+
+        T**                  _free_list;
+        volatile int         _head;
+        volatile int         _tail;
+        volatile int         _size;
+        int                  _max_size;
+        T*                   _buff;
+
+        static volatile int  _lck;
+
+public:
+
+        FreeList(int threads, int size_per_thread) 
+	: _size(threads*size_per_thread)
+        {
+	        _max_size = _size;
+	        _free_list = new T*[_max_size];
+                _buff = new T[_max_size]();
+                for(int i = 0; i < _max_size; i++)
+		        _free_list[i] = &_buff[i];
+
+                _head = 0;
+	        _tail = 0;
+		CCP::Memory::read_write_barrier();
+	}
+
+        FreeList(int threads, int size_per_thread, T* buff) 
+	: _buff(NULL), _size(threads*size_per_thread)
+        {
+		CCP::Memory::read_write_barrier();
+	        _max_size = _size;
+	        _free_list = new T*[_max_size];
+                for(int i = 0; i < _max_size; i++)
+		        _free_list[i] = &buff[i];
+
+                _head = 0;
+	        _tail = 0;
+		CCP::Memory::read_write_barrier();
+	}
+
+        ~FreeList() {
+	        delete[] _buff;
+	        delete[] _free_list;
+	        CCP::Memory::read_write_barrier();
+	}
+
+        inline_ T* alloc(int iThread) {
+	        T* e = null;
+
+	        while( !CAS(&_lck, 0, 1) );
+
+                if ( _size > 0 ) {
+                        --_size;
+
+			e = _free_list[_head];
+
+			++_head;
+			if ( _head == _max_size )
+			        _head = 0;
+
+		}
+
+                FASTORE(&_lck, 0);
+                return e;
+	}
+
+        inline_ void dealloc(int iThread, T* e) {
+	        while( !CAS(&_lck, 0, 1) );
+
+                assert( _size < _max_size );
+                ++_size;
+
+                _free_list[_tail] = e;
+
+                ++_tail;
+                if ( _tail == _max_size )
+		       _tail = 0;
+ 
+                FASTORE(&_lck, 0);
+	}
+
+};
+
+template<class T> volatile int FreeList<T>::_lck = 0;
+
+
+
+
+#if 1
+
+//synchronization-free free list
+//assumptions:
+//  for each element
+//    only one thread allocs it
+//    only one thread (possibly the same) uses and deallocs it
+//implementation:
+//  per-thread free lists
+//  special 2-way synchronization based on a hand-shake
+//  bad programs can overfill the buffer and cause deadlock
+template <class T>
+class WorkQueueFreeList  {
+
+private:
+          
+        class AlignedInt {
+        public:
+	        char  _pad1[CACHE_LINE_SIZE];
+	        int   _val;
+		char  _pad2[CACHE_LINE_SIZE-sizeof(int)];
+
+	        AlignedInt() : _val(0) {}
+	        AlignedInt(int v) :_val(v) {}
+	};
+
+        T*            _free_list;
+        AlignedInt*   _heads;
+        int           _sz_per;
+        int           _threads;
+        bool          _list_alloc; 
+
+public:
+
+        //static volatile int  _lck;
+
+        WorkQueueFreeList(int threads, int size_per_thread) 
+	: _sz_per(size_per_thread), _threads(threads), _list_alloc(true)
+        {
+	        //std::cout << "size_per_thread= " << size_per_thread << std::endl;
+	        //std::cout << "threads= " << threads << std::endl;
+	        _free_list = new T[threads*size_per_thread];
+                _heads = new AlignedInt[threads];
+
+                for(int i = 0; i < threads; i++)
+		        _heads[i] = AlignedInt(i * size_per_thread);
+
+		CCP::Memory::read_write_barrier();
+	}
+
+        WorkQueueFreeList(int threads, int size_per_thread, T* buff) 
+	: _sz_per(size_per_thread), _threads(threads), _free_list(buff), _list_alloc(false)
+        {
+		CCP::Memory::read_write_barrier();
+	        //std::cout << "size_per_thread= " << size_per_thread << std::endl;
+	        //std::cout << "threads= " << threads << std::endl;
+
+                _heads = new AlignedInt[threads];
+                for(int i = 0; i < threads; i++)
+		        _heads[i] = AlignedInt(i * size_per_thread);
+
+		CCP::Memory::read_write_barrier();
+	}
+
+        ~WorkQueueFreeList() {
+	        CCP::Memory::read_write_barrier();
+                if ( _list_alloc )
+	                delete[] _free_list;
+	        delete[] _heads;
+	}
+
+        inline_ T* alloc(int iThread) {
+	        //while( !CAS(&_lck, 0, 1) );
+
+                //test
+	        //CCP::Memory::read_write_barrier();
+
+	        int& head = _heads[iThread]._val;
+		//std::cout << "head = " << head << std::endl;
+	        T* e = &_free_list[head];
+
+                while( !e->free );
+
+                ++head;
+                if ( head == ((iThread + 1) * _sz_per) )
+		        head -= _sz_per;
+
+                e->free = false;
+
+                //test
+		//CCP::Memory::read_write_barrier();
+
+                //FASTORE(&_lck, 0);
+                return e;
+	}
+
+        inline_ void dealloc(int iThread, T* e) {
+	        //while( !CAS(&_lck, 0, 1) );
+
+                //test
+	        //CCP::Memory::read_write_barrier();
+
+	        while( e->free );
+                e->free = true;
+
+                //test
+		//CCP::Memory::read_write_barrier();
+
+                //FASTORE(&_lck, 0);
+	}
+
+};
+
+//template<class T> volatile int WorkQueueFreeList<T>::_lck = 0;
+
+
+#else
+
+typedef FreeList WorkQueueFreeList;
+
 #endif
+
+#endif
+
+

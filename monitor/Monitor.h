@@ -36,11 +36,15 @@ public:
 
         virtual _u64 getrewardnotsafe() = 0;
 
+        virtual _u64 getreward(_u64& changes) = 0;
+
+        virtual _u64 getrewardnotsafe(_u64& changes) = 0;
+
         virtual void addreward(int tid, _u64 amt) = 0;
 
         virtual void addrewardnotsafe(int tid, _u64 amt) = 0;
 
-        virtual _u64 waitrewardnotsafe(_u64 lastval) = 0;
+        virtual _u64 waitchangenotsafe(_u64& changes) = 0;
 
 };
 

@@ -35,18 +35,15 @@
 #include "Heartbeat.h"
 #include "cpp_framework.h"
 
-#include "FCQueue.h"
 #include "SmartQueue.h"
 #include "MSQueue.h"
 #include "BasketsQueue.h"
 #include "ComTreeQueue.h"
 #include "OyamaQueue.h"
 #include "OyamaQueueCom.h"
-#include "FCSkipList.h"
 #include "SmartSkipList.h"
 #include "LFSkipList.h"
 #include "LazySkipList.h"
-#include "FCPairingHeap.h"
 #include "SmartPairingHeap.h"
 #include "FCStack.h"
 #include "LFStack.h"
@@ -363,17 +360,17 @@ int main(int argc, char* argv[])
 						 );
 	}
 
-	FCBase<lli>* ds1[NUMDS] = { new FCQueue<lli>(), new SmartQueue<lli>(hbmon, learner[0]), new MSQueue<lli>(), new BasketsQueue<lli>(),
+	FCBase<lli>* ds1[NUMDS] = { new SmartQueue<lli,false,false>(null,null), new SmartQueue<lli,true,true>(hbmon, learner[0]), new MSQueue<lli>(), new BasketsQueue<lli>(),
                                     null /*new ComTreeQueue<lli>()*/, new OyamaQueue<lli>(), null /*new OyamaQueueCom<lli>()*/,
-				    new FCSkipList<lli>(), new SmartSkipList<lli>(hbmon, learner[1]), new LFSkipList<lli>(),
-				    new LazySkipList<lli>(), new FCPairHeap<lli>(), new SmartPairHeap<lli>(hbmon, learner[2]),
+				    new SmartSkipList<lli,false,false>(null,null), new SmartSkipList<lli,true,true>(hbmon, learner[1]), new LFSkipList<lli>(),
+				    new LazySkipList<lli>(), new SmartPairHeap<lli,false,false>(null,null), new SmartPairHeap<lli,true,true>(hbmon, learner[2]),
                                     new FCStack<lli>(), new LFStack<lli>(), new EliminationStack<lli>() };
 
 #ifdef QUEUE2
-        FCBase<lli>* ds2[NUMDS] = { new FCQueue<lli>(), new SmartQueue<lli>(hbmon, learner[3]), new MSQueue<lli>(), new BasketsQueue<lli>(),
+        FCBase<lli>* ds2[NUMDS] = { new SmartQueue<lli,false,false>(null,null), new SmartQueue<lli,true,true>(hbmon, learner[3]), new MSQueue<lli>(), new BasketsQueue<lli>(),
                                     null /*new ComTreeQueue<lli>()*/, new OyamaQueue<lli>(), null /*new OyamaQueueCom<lli>()*/,
-                                    new FCSkipList<lli>(), new SmartSkipList<lli>(hbmon, learner[4]), new LFSkipList<lli>(),
-                                    new LazySkipList<lli>(), new FCPairHeap<lli>(), new SmartPairHeap<lli>(hbmon, learner[5]),
+                                    new SmartSkipList<lli,false,false>(null,null), new SmartSkipList<lli,true,true>(hbmon, learner[4]), new LFSkipList<lli>(),
+                                    new LazySkipList<lli>(), new SmartPairHeap<lli,false,false>(null,null), new SmartPairHeap<lli,true,true>(hbmon, learner[5]),
                                     new FCStack<lli>(), new LFStack<lli>(), new EliminationStack<lli>() };
 #else
         FCBase<lli>* ds2[NUMDS] = {null};

@@ -33,7 +33,7 @@
 #include "Heartbeat.h"
 #include "Monitor.h"
 
-//#define _USE_SMARTLOCK
+#define _USE_SMARTLOCK
 //#define _FC_CAS_STATS
 
 using namespace CCP;
@@ -51,7 +51,7 @@ private:
 
                 static Node* get_new(final int in_num_values) {
                         final size_t new_size = (sizeof(Node) + (in_num_values + 2 - 256) * sizeof(FCIntPtr));
-			
+                        
                         Node* final new_node = (Node*) malloc(new_size);
                         new_node->_next = null;
                         return new_node;
@@ -74,12 +74,15 @@ private:
         Node* volatile            _tail;
         int volatile              _NODE_SIZE;
         Node* volatile            _new_node;
+        int volatile              _size;
+        _u64 volatile             _dead_count;
+        bool volatile             _empty           ATTRIBUTE_CACHE_ALIGNED;
         char                      _pad             ATTRIBUTE_CACHE_ALIGNED;
 
 
         //helper function -----------------------------
-        inline_ void flat_combining(final int iThread) {
-                
+        inline_ void flat_combining(final int iThread) {                
+
                 // prepare for enq
                 FCIntPtr volatile* enq_value_ary;
                 if(null == _new_node) 
@@ -93,16 +96,27 @@ private:
                 FCIntPtr volatile * deq_value_ary = _tail->_values;
                 deq_value_ary += deq_value_ary[0];
 
+		++FCBase<T>::_cleanup_counter;
                 int maxPasses;
-                if ( !_AUTO_TUNE )
+                if ( !_AUTO_TUNE ) {
                         maxPasses = FCBase<T>::_num_passes;
-                else
-		        maxPasses = 1 + 4*_learner->getdiscval(_sc_tune_id, iThread);
-                
+			//std::cout << this << " num_passes " << maxPasses << std::endl;
+		}
+                else {
+		        if ( 0 == (FCBase<T>::_cleanup_counter & 0xff) ) {
+			        maxPasses = 1 + 10*_learner->samplediscval(_sc_tune_id);
+                                //cout << "scancount = " << maxPasses << endl; 
+			}
+                        else 
+                                maxPasses = 1 + 10*_learner->getdiscval(_sc_tune_id, iThread);
+		}                
+
                 int num_added = 0;
-		int total_changes = 0;
+                int num_removed = 0;
+                int total_changes = 0;
 
                 for (int iTry=0;iTry<maxPasses; ++iTry) {
+		        //test
                         //Memory::read_barrier();
 
                         int num_changes = 0;
@@ -111,7 +125,7 @@ private:
                         while(null != curr_slot->_next) {
                                 final FCIntPtr curr_value = curr_slot->_req_ans;
                                 if(curr_value > FCBase<T>::_NULL_VALUE) {
-				        if ( 0 == _gIsDedicatedMode )
+                                        if ( 0 == _gIsDedicatedMode )
                                                 ++num_changes; 
                                         *enq_value_ary = curr_value;
                                         ++enq_value_ary;
@@ -131,9 +145,11 @@ private:
                                                 _NODE_SIZE += 4;
                                         }
                                 } else if(FCBase<T>::_DEQ_VALUE == curr_value) {
+				        if ( iTry == maxPasses-1 ) {
                                         final FCIntPtr curr_deq = *deq_value_ary;
                                         if(0 != curr_deq) {
                                                 ++num_changes;
+                                                ++num_removed;
                                                 curr_slot->_req_ans = -curr_deq;
                                                 curr_slot->_time_stamp = FCBase<T>::_NULL_VALUE;
                                                 ++deq_value_ary;
@@ -145,25 +161,39 @@ private:
                                                 deq_value_ary += deq_value_ary[0];
                                                 continue;
                                         } else {
-					        if ( 0 == _gIsDedicatedMode )
+                                                if ( 0 == _gIsDedicatedMode )
                                                         ++num_changes;
                                                 curr_slot->_req_ans = FCBase<T>::_NULL_VALUE;
                                                 curr_slot->_time_stamp = FCBase<T>::_NULL_VALUE;
                                         } 
+                                        }
                                 }
                                 curr_slot = curr_slot->_next;
 
 
                         }//while on slots
 
-			total_changes += num_changes;   
-		        if ( _AUTO_REWARD )
-		                _mon->addreward(iThread, num_changes);
+                        total_changes += num_changes;   
+                        //if ( _AUTO_REWARD )
+                        //        _mon->addreward(iThread, num_changes);
 
-		}//for repetition
+                }//for repetition
 
-		//if ( _AUTO_REWARD )
-		//        _mon->addreward(iThread, total_changes);
+                _size += (num_added - num_removed);
+                if ( _size == 0 && !_empty ) {
+		        _empty = true;
+                } else {
+                        if (_empty)
+		                 _empty = false;
+		}
+                                
+                if ( (num_added==0) && (num_removed==0) )
+		        _dead_count |= (U64(1) << iThread);
+                else
+		        _dead_count = 0;
+
+                if ( _AUTO_REWARD )
+                        _mon->addreward(iThread, total_changes);
 
                 if(0 == *deq_value_ary && null != _tail->_next) {
                         Node* tmp = _tail;
@@ -180,8 +210,6 @@ private:
                         _new_node  = null;
                 } 
 
-
-
         }
 
 public:
@@ -189,9 +217,13 @@ public:
         SmartQueue(Monitor* mon, LearningEngine* learner) 
         :       _NUM_REP(FCBase<T>::_NUM_THREADS),
                 _REP_THRESHOLD((int)(Math::ceil(FCBase<T>::_NUM_THREADS/(1.7)))),
-	        _mon(mon),
-	        _learner(learner)
+                _mon(mon),
+                _learner(learner)
         {
+	        assert( FCBase<T>::_NUM_THREADS <= (sizeof(_u64)*8) );
+	        _size = 0;
+                _empty = false;
+                _dead_count = 0;
                 _head = Node::get_new(FCBase<T>::_NUM_THREADS);
                 _tail = _head;
                 _head->_values[0] = 1;
@@ -223,6 +255,7 @@ public:
         //abort semaphore version
         //enq ......................................................
         boolean add(final int iThread, PtrNode<T>* final inPtr) {
+
                 final FCIntPtr inValue = (FCIntPtr) inPtr;
 
                 SlotInfo* my_slot = FCBase<T>::_tls_slot_info.get();
@@ -231,6 +264,9 @@ public:
 
                 SlotInfo* volatile& my_next   = my_slot->_next;
                 FCIntPtr volatile*  my_re_ans = &my_slot->_req_ans;
+
+                //test
+		Memory::read_write_barrier();
                 *my_re_ans = inValue;
 
                 //this is needed because the combiner may remove you
@@ -249,11 +285,19 @@ public:
                         flat_combining(iThread);
                         _fc_lock->unlock(iThread);
                 }
+
+                //test
+		//Memory::read_write_barrier();
+
                 return true;
         }
 
         //deq ......................................................
         PtrNode<T>* remove(final int iThread, PtrNode<T>* final inPtr) {
+
+                //test
+		//Memory::read_write_barrier();
+
                 final FCIntPtr inValue = (FCIntPtr) inPtr;
 
                 SlotInfo* my_slot = FCBase<T>::_tls_slot_info.get();
@@ -277,6 +321,10 @@ public:
                         flat_combining(iThread);
                         _fc_lock->unlock(iThread);
                 }
+ 
+                //test
+		//Memory::read_write_barrier();
+
                 return (PtrNode<T>*) -(*my_re_ans);
         }
 #else
@@ -398,12 +446,21 @@ public:
 
         //general .....................................................
         int size() {
-                return 0;
+                return _size;
         }
 
         final char* name() {
-                return "SmartQueue";
+                return _AUTO_TUNE ? "SmartQueue" : "FCQueue";
         }
+
+        bool dead() {
+	        return _dead_count == ((U64(-1) >> (sizeof(_u64)*8 - FCBase<T>::_NUM_THREADS)));
+        }
+
+        bool empty() {
+	        return _empty;
+        }
+
 
         void cas_reset(final int iThread) {
 #ifdef _USE_SMARTLOCK

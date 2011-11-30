@@ -85,6 +85,11 @@ private:
 
         char pad[CACHE_LINE_SIZE];
 
+        inline int get_perm_val(LearningEngine* learner, int lock_sched_id, int id) 
+        {
+	        return (null != learner) ? learner->getpermval(lock_sched_id, id) : id;
+	}
+
 public:
 
         enum algorithm_t {
@@ -100,13 +105,14 @@ public:
                 fastprlock = NULL;
                 id = 0;
                 learner = NULL;
+                alg = PRLOCK;
 
 #ifdef CASSTATS
                 casops = 0;
                 casfails = 0;
 #endif
 
-                alg = PRLOCK;
+                CCP::Memory::read_write_barrier();
         }   
 
         SmartLockLiteNode(SmartLockLiteState *s, algorithm_t a, LearningEngine *le, int lsid, int i)
@@ -117,6 +123,11 @@ public:
                 learner = le;
                 alg = a;
                 
+#ifdef CASSTATS
+                casops = 0;
+                casfails = 0;
+#endif
+
                 CCP::Memory::read_write_barrier();
         }
 
@@ -195,7 +206,7 @@ public:
         //must play nicely with trylock_*
         bool trylock_pr(volatile T *ptr, T val) //__attribute__ ((noinline))
         {
-	        _u64 mypri = learner->getpermval(lock_sched_id, id);
+	        _u64 mypri = get_perm_val(learner, lock_sched_id, id); 
                 _u64 lockbit = (U64(1) << 63);
                 _u64 ormask = (U64(1) << mypri);
                 _u64 ormmooorm = ormask | (ormask-1);
@@ -241,7 +252,7 @@ public:
                         }
 
                         _u64 tmp;
-                        if ( (tmp=learner->getpermval(lock_sched_id, id)) != mypri ) {
+                        if ( (tmp=get_perm_val(learner, lock_sched_id, id)) != mypri ) {
                                 if ( needclear ) {
                                         FAAND(fastprlock, ~ormask);
                                         needclear = false;
@@ -307,11 +318,17 @@ private:
 
         char pad[CACHE_LINE_SIZE];
 
+        inline LearningEngine::learning_mode_t get_mode(LearningEngine* learner)
+	{
+	        return (null != learner) ? learner->getmode() : LearningEngine::disabled;
+	}
+
 public:
 
-        SmartLockLite(unsigned int threads, LearningEngine *le): nthreads(threads), learner(le), mode(le->getmode())
+        SmartLockLite(unsigned int threads, LearningEngine *le): nthreads(threads), learner(le), mode(get_mode(le))
         {
                 assert( threads <= 63 );
+
 #if 0
                 slnodes = (SmartLockLiteNode<T>*) CCP::Memory::byte_aligned_malloc(sizeof(SmartLockLiteNode<T>)*threads, CACHE_LINE_SIZE);
 #else

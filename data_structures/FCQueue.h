@@ -64,6 +64,7 @@ private:
         Node* volatile  _tail;
         int volatile    _NODE_SIZE;
         Node* volatile  _new_node;
+        int volatile    _size;
 
         //helper function -----------------------------
         inline_ void flat_combining() {
@@ -82,6 +83,7 @@ private:
                 deq_value_ary += deq_value_ary[0];
 
                 int num_added = 0;
+                int num_removed = 0;
                 //final int repThresh = _REP_THRESHOLD;
                 final int repThresh = 0;
 
@@ -115,6 +117,7 @@ private:
                                         ++num_changes;
                                         final FCIntPtr curr_deq = *deq_value_ary;
                                         if(0 != curr_deq) {
+					        ++num_removed;
                                                 curr_slot->_req_ans = -curr_deq;
                                                 curr_slot->_time_stamp = FCBase<T>::_NULL_VALUE;
                                                 ++deq_value_ary;
@@ -138,6 +141,8 @@ private:
                                 break;
                 }//for repetition
 
+                _size += (num_added - num_removed);
+
                 if(0 == *deq_value_ary && null != _tail->_next) {
                         Node* tmp = _tail;
                         _tail = _tail->_next;
@@ -160,6 +165,7 @@ public:
 	:       _NUM_REP(FCBase<T>::_NUM_THREADS),
                 _REP_THRESHOLD((int)(Math::ceil(FCBase<T>::_NUM_THREADS/(1.7))))
         {
+	        _size = 0;
                 _head = Node::get_new(FCBase<T>::_NUM_THREADS);
                 _tail = _head;
                 _head->_values[0] = 1;
@@ -174,6 +180,9 @@ public:
 
         //enq ......................................................
         boolean add(final int iThread, PtrNode<T>* final inPtr) {
+	        //test
+	        //Memory::read_write_barrier();
+
                 final FCIntPtr inValue = (FCIntPtr) inPtr;
                 CasInfo& my_cas_info = FCBase<T>::_cas_info_ary[iThread];
 
@@ -204,6 +213,10 @@ public:
 #ifdef _FC_CAS_STATS
                                 ++(my_cas_info._ops);
 #endif
+
+	                        //test
+				//Memory::read_write_barrier();
+
                                 return true;
                         } else {
                                 //Memory::write_barrier();
@@ -219,6 +232,10 @@ public:
 #ifdef _FC_CAS_STATS
                                         ++(my_cas_info._ops);
 #endif
+
+	                                //test
+					//Memory::read_write_barrier();
+
                                         return true;
                                 }
                         }
@@ -227,6 +244,10 @@ public:
 
         //deq ......................................................
         PtrNode<T>* remove(final int iThread, PtrNode<T>* final inPtr) {
+
+	        //test
+	        //Memory::read_write_barrier();
+
                 final FCIntPtr inValue = (FCIntPtr) inPtr;
                 CasInfo& my_cas_info = FCBase<T>::_cas_info_ary[iThread];
 
@@ -257,6 +278,10 @@ public:
 #ifdef _FC_CAS_STATS
                                 ++(my_cas_info._ops);
 #endif
+
+	                        //test
+				//Memory::read_write_barrier();
+
                                 return (PtrNode<T>*) -(*my_re_ans);
                         } else {
                                 //Memory::write_barrier();
@@ -272,6 +297,9 @@ public:
 #ifdef _FC_CAS_STATS
                                         ++(my_cas_info._ops);
 #endif
+	                                //test
+					//Memory::read_write_barrier();                        
+
                                         return (PtrNode<T>*) -(*my_re_ans);
                                 }
                         }
@@ -286,7 +314,7 @@ public:
 
         //general .....................................................
         int size() {
-                return 0;
+                return _size;
         }
 
         final char* name() {

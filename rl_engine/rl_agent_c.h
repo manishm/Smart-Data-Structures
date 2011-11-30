@@ -2,27 +2,27 @@
 #define _RL_AGENT_C_H
 
                  
-////////////////////////////////////////////////////////////////////////////////                
-// File    : rl_agent_c.h                                                           
+/////////////////////////////////////////////////////////////////////////////// 
+// File    : rl_agent_c.h                                                       
 // Authors : Jonathan Eastep   email: jonathan.eastep@gmail.com 
-//           David Wingate     email: wingated@mit.edu                                          
-// Written : 16 February 2011                                                                   
+//           David Wingate     email: wingated@mit.edu                          
+// Written : 16 February 2011                                                   
 //                                                         
 // Copyright (C) 2011 Jonathan Eastep, David Wingate     
-//                                                                                              
-// This program is free software; you can redistribute it and/or modify                         
-// it under the terms of the GNU General Public License as published by                         
-// the Free Software Foundation; either version 2 of the License, or                            
-// (at your option) any later version.                                                          
-//                                                                                              
-// This program is distributed in the hope that it will be useful, but                          
-// WITHOUT ANY WARRANTY; without even the implied warranty of                                   
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU                             
-// General Public License for more details.                                                     
-//                                                                                              
-// You should have received a copy of the GNU General Public License                            
-// along with this program; if not, write to the Free Software Foundation                       
-// Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA                                  
+//                                                                              
+// This program is free software; you can redistribute it and/or modify         
+// it under the terms of the GNU General Public License as published by         
+// the Free Software Foundation; either version 2 of the License, or            
+// (at your option) any later version.                                          
+//                                                                              
+// This program is distributed in the hope that it will be useful, but          
+// WITHOUT ANY WARRANTY; without even the implied warranty of                   
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU             
+// General Public License for more details.                                     
+//                                                                              
+// You should have received a copy of the GNU General Public License            
+// along with this program; if not, write to the Free Software Foundation       
+// Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA                  
 ////////////////////////////////////////////////////////////////////////////////
 
 
@@ -58,10 +58,11 @@ typedef struct rl_act_desc_t {
 } rl_act_desc_t;
 
 
-rl_nac_t rl_nac_init( int num_state_feats, rl_act_desc_t *rad );
+rl_nac_t rl_nac_init( int num_state_feats, rl_act_desc_t *rad, double slowdownratio );
 void rl_nac_deinit( rl_nac_t r );
 
 void rl_nac_action_sample( rl_nac_t _r );
+void rl_nac_action_sample_individual( rl_nac_t _r, int act_num );
 void rl_nac_update( rl_nac_t _r, double reward, double *statefeats );
 void rl_nac_get_params( rl_nac_t _r, int act_num,
 			int *param_cnt, double **params );

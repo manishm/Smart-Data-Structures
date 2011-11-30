@@ -81,6 +81,7 @@ private:
 
         //reward
         double   last_checkpointed_reward   ATTRIBUTE_CACHE_ALIGNED;
+        _u64     last_checkpointed_changes;
         double   total_reward_ever;
         timespec last_update_timestamp;
 
@@ -97,14 +98,8 @@ private:
         rl_nac_t             r;
         struct drand48_data  rng_state      ATTRIBUTE_CACHE_ALIGNED;
 
-        //slowdown 
+        //slowdown related
         double               rl_to_sleepidle_ratio  ATTRIBUTE_CACHE_ALIGNED;
-        _u64                 time_window[8];
-        int                  time_indx;
-        _u64                 injection_nanos;
-        timespec             time1;
-        timespec             time2;
-        _u64                 time_sum;
 
         //padding
         char pad  ATTRIBUTE_CACHE_ALIGNED;
@@ -162,7 +157,6 @@ private:
 
                //cerr << "In registerLearner with mode=" << mode << endl;
                
-               initSlowdownMode();
                initAPI();
                initrl();
 
@@ -216,7 +210,6 @@ private:
 
                deinitrl();
                deinitAPI();
-               deinitSlowdownMode();
 
                CCP::Memory::read_write_barrier();
                dellock = 0;
@@ -262,36 +255,13 @@ private:
                 }
         }
 
-
-        void initSlowdownMode()
-        {
-                const _u64 rlnanos = 1000;
-
-                time_sum           = 8 * rlnanos;
-                injection_nanos    = (_u64) ((((double) time_sum) / 8.) / rl_to_sleepidle_ratio);
-                time_indx          = 0;
-
-                for(int i = 0; i < 8; i++)
-                        time_window[i] = rlnanos;
-        }
-
-        void deinitSlowdownMode()
-        { }
-
         void initAPI()
         {
                 //FIXME: the other cases aren't handled yet
                 assert( (num_lock_sched == 0) || (num_lock_sched == 1) );
-#if 1
                 int permbytes = ((sizeof(int)*nthreads + CACHE_LINE_SIZE - 1) / CACHE_LINE_SIZE) * CACHE_LINE_SIZE;
-                int discbytes = ((sizeof(int)*num_sc_tune + CACHE_LINE_SIZE - 1) / CACHE_LINE_SIZE) * CACHE_LINE_SIZE;
-
                 perm_vals     = (int*) CCP::Memory::byte_aligned_malloc(permbytes, CACHE_LINE_SIZE);
                 ext_perm_vals = (int*) CCP::Memory::byte_aligned_malloc(permbytes, CACHE_LINE_SIZE);
-#else
-                perm_vals     = new int[nthreads];
-                ext_perm_vals = new int[nthreads];
-#endif
 
                 for (int i = 0; i<nthreads; ++i) {
                         int p = clippriority( nthreads - 1 - i );
@@ -300,32 +270,22 @@ private:
                 }
 
                 assert( num_sc_tune >= 0 );
-#if 1
+                int discbytes = CACHE_LINE_SIZE * num_sc_tune;
                 disc_vals     = (int*) CCP::Memory::byte_aligned_malloc(discbytes, CACHE_LINE_SIZE);
                 ext_disc_vals = (int*) CCP::Memory::byte_aligned_malloc(discbytes, CACHE_LINE_SIZE);
-#else
-                disc_vals     = new int[num_sc_tune];
-                ext_disc_vals = new int[num_sc_tune];
-#endif
+
                 for (int i = 0; i<num_sc_tune; ++i) {
-                        disc_vals[i] = nthreads;
-                        ext_disc_vals[i] = nthreads;
+                        disc_vals[i*CACHE_LINE_SIZE] = nthreads;
+                        ext_disc_vals[i*CACHE_LINE_SIZE] = nthreads;
                 }
         }
 
         void deinitAPI()
         {
-#if 1
 	        CCP::Memory::byte_aligned_free(disc_vals);
 		CCP::Memory::byte_aligned_free(ext_disc_vals);
 		CCP::Memory::byte_aligned_free(perm_vals);
 		CCP::Memory::byte_aligned_free(ext_perm_vals);
-#else
-                delete[] disc_vals;
-                delete[] ext_disc_vals;
-                delete[] perm_vals;
-                delete[] ext_perm_vals;
-#endif
         }
 
         void initrl()
@@ -342,6 +302,20 @@ private:
                 {
                         //cerr << "Configuring ml for both" << endl;
                         //nthreads perm vals, 1 discrete (range 0 to 12)
+		        rl_act_entry_t* raes = new rl_act_entry_t[ 1+num_sc_tune ];
+                        raes[0].type = RLA_PERM;
+                        raes[0].first_param = nthreads;
+                        raes[0].vals = perm_vals;
+                        for(int i = 0; i < num_sc_tune; i++) {
+			        raes[1+i].type = RLA_DISCRETE;
+				raes[1+i].first_param = 1;
+				raes[1+i].second_param = 13;
+				raes[1+i].vals = &disc_vals[i*CACHE_LINE_SIZE];
+			}
+                        rl_act_desc_t rad = { 1+num_sc_tune, raes };
+                        r = rl_nac_init( 1, &rad, rl_to_sleepidle_ratio );
+                        delete[] raes;
+#if 0
                         rl_act_entry_t raes[] = 
                           {{ RLA_PERM, 0, 0, perm_vals },
                            { RLA_DISCRETE, 0, 13, disc_vals }};
@@ -349,17 +323,29 @@ private:
                         raes[1].first_param = num_sc_tune;
                         rl_act_desc_t rad = { 2, raes };
 
-                        r = rl_nac_init( 1, &rad );
+                        r = rl_nac_init( 1, &rad, rl_to_sleepidle_ratio );
+#endif
                 }     
                 else if ( mode & scancount_tuning ) {
                         //cerr << "Configuring ml for external discrete" << endl;
                         //0 perm vals, 1 discrete (range 0 to 12)
+		        rl_act_entry_t* raes = new rl_act_entry_t[ num_sc_tune ];
+                        for(int i = 0; i < num_sc_tune; i++) {
+			        raes[i].type = RLA_DISCRETE;
+				raes[i].first_param = 1;
+				raes[i].second_param = 13;
+				raes[i].vals = &disc_vals[i*CACHE_LINE_SIZE];
+			}
+                        rl_act_desc_t rad = { num_sc_tune, raes };
+                        r = rl_nac_init( 1, &rad, rl_to_sleepidle_ratio );
+                        delete[] raes;
+#if 0
                         rl_act_entry_t raes[] = 
                           {{ RLA_DISCRETE, 0, 13, disc_vals }};
                         raes[0].first_param = num_sc_tune;
                         rl_act_desc_t rad = { 1, raes };
-
-                        r = rl_nac_init( 1, &rad );
+                        r = rl_nac_init( 1, &rad, rl_to_sleepidle_ratio );
+#endif
                 } 
                 else if ( mode & lock_scheduling ) {
                         //cerr << "Configuring ml for lock scheduling" << endl;
@@ -369,11 +355,12 @@ private:
                         raes[0].first_param = nthreads;
                         rl_act_desc_t rad = { 1, raes };
 
-                        r = rl_nac_init( 1, &rad );
+                        r = rl_nac_init( 1, &rad, rl_to_sleepidle_ratio );
                 }
 
                 // initialize reward computation stuff
                 last_checkpointed_reward = 0;
+                last_checkpointed_changes = 0;
                 total_reward_ever = 0;
                 last_update_timestamp = rlgettime();
         }
@@ -398,15 +385,16 @@ private:
                 return ts;
         }
 
-        double getmonitorsignal(_u64 lastval)
+#if 0
+        double getmonitorsignal(_u64& changes)
         {
-	        //return mon ? mon->getrewardnotsafe() : 0;
-                return mon ? mon->waitrewardnotsafe(lastval) : 0;
+                return mon ? mon->waitrewardnotsafe(changes) : 0;
         }
 
         bool getreward( double *reward ) 
         {
-                double total_reward_ever = getmonitorsignal(last_checkpointed_reward);
+	        _u64 total_changes_ever = last_checkpointed_changes;
+                double total_reward_ever = getmonitorsignal(total_changes_ever);
                 double accumulated_heartbeats = total_reward_ever - last_checkpointed_reward;
 
                 // all of the information we need to compute a rate.
@@ -415,39 +403,56 @@ private:
                 double time_elapsed = ((double) elapsed) / ((double) 1e9);
 
                 // originals 10, .0001
+                //100 .01 works well for queue
                 if ( (accumulated_heartbeats > 10) || (time_elapsed > 0.0001) ) {
+                //if ( accumulated_heartbeats > 0 ) {
                         last_update_timestamp = tmp_time;
                         double r = accumulated_heartbeats / time_elapsed;
                         *reward = r;
                         //cerr << "reward= " << r << endl;
                         last_checkpointed_reward = total_reward_ever;
+                        last_checkpointed_changes = total_changes_ever;
                         return true;
                 }
                 
                 return false;
         }
-
-        void slowdown_part1()
+#else
+        double getmonitorsignal(_u64& changes)
         {
-                //cerr << "injection_nanos= " << injection_nanos << endl;
-                if ( mode & inject_sleep )
-                        CCP::Thread::sleep(0, injection_nanos);
-                else if ( mode & inject_delay ) {
-                        CCP::Thread::delay(injection_nanos);
-                }
-                time1 = rlgettime();
+                return mon ? mon->waitchangenotsafe(changes) : 0;
         }
 
-        void slowdown_part2()
+        bool getreward( double *reward ) 
         {
-                time2 = rlgettime();
-                _u64 delta = CCP::Thread::difftimes(time1,time2);
-                time_sum = time_sum - time_window[time_indx] + delta;
-                time_window[time_indx] = delta;
-                time_indx = (time_indx + 1) % 8;
-                double avg = ((double) time_sum) / 8.;
-                injection_nanos = (_u64) (avg / rl_to_sleepidle_ratio);
+	        _u64 total_changes_ever = last_checkpointed_changes;
+                double total_reward_ever = getmonitorsignal(total_changes_ever);
+                _u64 accumulated_changes = total_changes_ever - last_checkpointed_changes;
+
+                // originals 10, .0001
+                //100 .01 works well for queue
+                //if ( (accumulated_heartbeats > 10) || (time_elapsed > 0.0001) ) {
+                if ( accumulated_changes >= 0xf ) {
+                        double accumulated_heartbeats = total_reward_ever - last_checkpointed_reward;
+		        //assert( (accumulated_heartbeats > 0) && (accumulated_heartbeats < 5000) );
+
+                        // all of the information we need to compute a rate.
+                        timespec tmp_time = rlgettime();
+                        _u64 elapsed = CCP::Thread::difftimes(last_update_timestamp, tmp_time);
+                        double time_elapsed = ((double) elapsed) / ((double) 1e9);
+
+                        last_update_timestamp = tmp_time;
+                        double r = accumulated_heartbeats / time_elapsed;
+                        *reward = r;
+                        //cerr << "reward= " << r << endl;
+                        last_checkpointed_reward = total_reward_ever;
+                        last_checkpointed_changes = total_changes_ever;
+                        return true;
+		}
+                
+                return false;
         }
+#endif
 
         void rlupdate() 
         {
@@ -464,27 +469,14 @@ private:
 
                 do
                 {
-                        if ( mode & (inject_sleep | inject_delay) )
-                                slowdown_part1();
-
                         double reward;
                         if ( getreward( &reward ) )
                         {
-                                rl_nac_action_sample( r );
-
-                                //output the vals
-                                memcpy(ext_disc_vals, disc_vals, num_sc_tune*sizeof(int));
-                                for(int i = 0; i < nthreads; ++i)
-                                        ext_perm_vals[i] = clippriority(nthreads - 1 - perm_vals[i]);
-                                //cerr << "scancount = " << disc_vals[0] << endl;
+			        //getsample();
 
                                 double statefeats[] = {1.};
                                 rl_nac_update( r, reward, statefeats );
                         }
-
-                        if ( mode & (inject_sleep | inject_delay) )
-                                slowdown_part2();
-
                         //cerr << "looping in rlupdate." << endl;
 
                         status = learnercount;
@@ -576,6 +568,25 @@ private:
                 unregisterLearner(this);
         }
 
+        void getsample() {
+                rl_nac_action_sample( r );
+
+                //output the vals
+                for(int i = 0; i < num_sc_tune; i++)
+		        ext_disc_vals[i*CACHE_LINE_SIZE] = disc_vals[i*CACHE_LINE_SIZE];
+
+                for(int i = 0; i < nthreads; ++i)
+                        ext_perm_vals[i] = clippriority(nthreads - 1 - perm_vals[i]);
+                //cerr << "scancount = " << disc_vals[0] << endl;
+	}
+
+        int samplediscval(int sc_tune_id) {
+	        rl_nac_action_sample_individual( r, num_lock_sched + sc_tune_id );
+                int rv = disc_vals[CACHE_LINE_SIZE * sc_tune_id];
+                ext_disc_vals[CACHE_LINE_SIZE * sc_tune_id] = rv;
+                return rv;  
+	}
+
         inline int register_lock_sched_id()
 	{ 
 	        //FIXME: other cases aren't handled yet
@@ -591,7 +602,7 @@ private:
 
         inline int getdiscval(unsigned int sc_tune_id, unsigned int tid)
         {
-                return ext_disc_vals[sc_tune_id];
+                return ext_disc_vals[CACHE_LINE_SIZE * sc_tune_id];
         }
 
         inline int getpermval(unsigned int lock_sched_id, unsigned int tid)

@@ -28,11 +28,8 @@
 //#define DEBUG
 
 // after how many updates do we solve the linear system?
-//#define UPDATE_THRESH 20
-#define UPDATE_THRESH 200
-//#define UPDATE_THRESH 100
-//#define UPDATE_THRESH 20000
-//#define UPDATE_THRESH 2000
+#define UPDATE_THRESH 20
+#define CONV_EPSILON .1
 
 // regularizer for when we solve the linear least squares
 #define REGULARIZER 1e-6
@@ -46,7 +43,9 @@
  * =============================================================================
  */
 
-rl_nac::rl_nac( int _state_feat_cnt ) {
+rl_nac::rl_nac( int _state_feat_cnt, double slowdownratio ) {
+
+  initSlowdownMode(slowdownratio);
   acts = new act_vec;
 
   state_feat_cnt = _state_feat_cnt;
@@ -56,6 +55,7 @@ rl_nac::rl_nac( int _state_feat_cnt ) {
   gamma = 0.9;
   lambda = 0.1;
   beta = 0.0;  // for now
+  epsilon = CONV_EPSILON; // assumes vector has unit norm
 
   updates_since_last_step = 0;
 }
@@ -63,7 +63,7 @@ rl_nac::rl_nac( int _state_feat_cnt ) {
 void rl_nac::add_action( rl_act_type_t type,
 			 int first_param,
 			 int second_param,
-			 void *vals ) {
+			 void *vals) {
   rl_act *r;
 
   switch( type ) {
@@ -102,14 +102,16 @@ void rl_nac::update_sizes( void ) {
   A.Resize( sz, sz );
   b.Resize( sz );
   z.Resize( sz );
-
   phi_xt.Resize( state_feat_cnt );
+  prev_grad_guess.Resize( sz );
+  tmpvec.Resize( sz );
 
   A.Fill( 0 );
   b.Fill( 0 );
   z.Fill( 0 );
-
   phi_xt.Fill( 0 );
+  prev_grad_guess.Fill( 0 );
+  tmpvec.Fill( 0 );
 
 }
 
@@ -118,16 +120,32 @@ void rl_nac::update_sizes( void ) {
  */
 
 void rl_nac::update( double reward, double *statefeats ) {
+  vector_t grad_guess;
 
   // incorporate new information
   add_obs( reward, statefeats );
 
   // we don't want to solve the linear system of equations every time.
   if ( time_to_check() ) {
-    solve_for_grad();
-    if ( check_for_convergence() ) {
-      take_gradient_step();
+
+    if ( inject_delay ) {
+      //cout << "injecting delay of " << injection_nanos << ", for rl_to_sleepidle_ratio = " << rl_to_sleepidle_ratio << endl;
+      slowdown_part1();
     }
+
+    solve_for_grad( grad_guess ); //put result in grad_guess
+
+    if ( check_for_convergence(grad_guess, prev_grad_guess) ) {
+      farm_out_grad( grad_guess );
+      take_gradient_step();
+      prev_grad_guess.Fill( 0 );
+    } else {
+      prev_grad_guess = grad_guess;
+    }
+
+    if ( inject_delay )
+      slowdown_part2();
+
   }
 
   for ( int a=0; a<act_cnt; a++ ) {
@@ -221,15 +239,15 @@ vector_t rl_nac::collect_gradient( void ) {
   return result;
 }
 
-void rl_nac::solve_for_grad( void ) {
+void rl_nac::solve_for_grad( vector_t& guess ) {
 
   matrix_t copyA;
-  vector_t copyb;
+  //vector_t guess;
 
   LapackInfo info(0);
 
   copyA = A;
-  copyb = b;
+  guess = b;
   
   // Regularize this: A = A + REGULARIZER*eye(N)
   int cnt = A.GetM();
@@ -241,7 +259,7 @@ void rl_nac::solve_for_grad( void ) {
   printf("=====================================\n");
   printf("Solving for gradient:\n");
   copyA.Print();
-  copyb.Print();
+  guess.Print();
   printf("=====================================\n");
 #endif
 
@@ -253,34 +271,42 @@ void rl_nac::solve_for_grad( void ) {
     for ( int a=0; a<act_cnt; a++ ) {
       (*acts)[a]->natural_grad.Fill(0);
     }
+    guess.Fill( 0 );
     return;
   }
 
-  SolveQR( copyA, tau, copyb, info );
+  SolveQR( copyA, tau, guess, info );
 
   if ( info.GetInfo() != 0 ) {
     fprintf( stderr, "Error solving linear system!\n" );
     for ( int a=0; a<act_cnt; a++ ) {
       (*acts)[a]->natural_grad.Fill(0);
     }
+    guess.Fill( 0 );
     return;
   }
 
-  // results are stored in copyb
+  // results are stored in guess
 #ifdef DEBUG
   printf("Final answer:\n");
-  copyb.Print();
+  guess.Print();
 #endif
 
+  return;
+}
+
+
+void rl_nac::farm_out_grad( vector_t& converged_grad ) {
+
   // now we need to farm these out to the actions!  we start i at
-  // state_feat_cnt because copyb contains [w_t+1 v_t+1], but we only
+  // state_feat_cnt because converged_grad contains [w_t+1 v_t+1], but we only
   // want v_t+1 to add to the parameter vectors.
   int i = state_feat_cnt;
   for ( int a=0; a<act_cnt; a++ ) {
     int act_a_cnt = (*acts)[a]->grad.GetM();
 
     for ( int j=0; j<act_a_cnt; j++ ) {
-      (*acts)[a]->natural_grad(j) = copyb(i);
+      (*acts)[a]->natural_grad(j) = converged_grad(i);
       i++;
     }
 
@@ -302,8 +328,10 @@ void rl_nac::solve_for_grad( void ) {
 
 }
 
-bool rl_nac::check_for_convergence( void ) {
-  return true;
+bool rl_nac::check_for_convergence( vector_t& guess, vector_t& prev_guess ) {
+    Copy( guess, tmpvec );
+    Add( -1, prev_guess, tmpvec ); // Add(a,B,C) computes C = C + a*B
+    return ( Norm2(tmpvec) < epsilon );
 }
 
 void rl_nac::take_gradient_step( void ) {
@@ -459,15 +487,15 @@ void rl_act_discrete::act_sample( void ) {
 
 /* This is the C-style interface */
 
-rl_nac_t rl_nac_init( int num_state_feats, rl_act_desc_t *rad ) {
+rl_nac_t rl_nac_init( int num_state_feats, rl_act_desc_t *rad, double slowdownratio ) {
 
-  rl_nac *r = new rl_nac( num_state_feats );
+  rl_nac *r = new rl_nac( num_state_feats, slowdownratio );
 
   for ( int a=0; a<rad->act_cnt; a++ ) {
     r->add_action( rad->acts[a].type,
 		   rad->acts[a].first_param,
 		   rad->acts[a].second_param,
-		   rad->acts[a].vals );
+		   rad->acts[a].vals);
   }
 
   return r;
@@ -489,6 +517,13 @@ void rl_nac_action_sample( rl_nac_t _r ) {
     (*(r->acts))[a]->act_sample();
   }
 
+}
+
+void rl_nac_action_sample_individual( rl_nac_t _r, int act_num ) {
+  rl_nac *r = (rl_nac *)_r;
+  /* this samples and populates the appropriate values and
+     gradients */
+  (*(r->acts))[act_num]->act_sample();
 }
 
 void rl_nac_update( rl_nac_t _r, double reward, double *statefeats ) {

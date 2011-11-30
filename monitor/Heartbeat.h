@@ -42,10 +42,11 @@ private:
 
         //written atomically: via write in !concurrent mode otherwise via atomic ops 
         volatile _u64      total_items    ATTRIBUTE_CACHE_ALIGNED; 
+        volatile _u64      total_changes;
 
         //backoff settings in nanoseconds
         static final _u64  BACKOFF_START  ATTRIBUTE_CACHE_ALIGNED  = 100;
-        static final _u64  BACKOFF_MAX                             = 1600;
+        static final _u64  BACKOFF_MAX                             = 6400;
 
         char               pad            ATTRIBUTE_CACHE_ALIGNED;
 
@@ -57,18 +58,19 @@ public:
 
         Hb(bool concurrent = true)
 	: concurrent(concurrent),
-	  total_items(0)
+	  total_items(0), total_changes(0)
         {
                 CCP::Memory::read_write_barrier();
         }
 
         ~Hb() {}
 
-        inline _u64 waitheartbeatsnotsafe(_u64 lastval)
+        inline _u64 waitchange(_u64& changes)
 	{
-                //check if changed. if so return new val.
-                _u64 newval = total_items;
-                if ( newval != lastval )
+                //check if changed. if so return newval.
+	        _u64 lastchanges = changes;
+	        _u64 newval = readheartbeatsnotsafe(changes);
+                if ( changes != lastchanges )
                         return newval;
 
                 //spin with backoff until val changes
@@ -77,21 +79,9 @@ public:
                         CCP::Thread::delay(backoff);
                         backoff <<= 1;
                         if ( backoff > BACKOFF_MAX )
-                                return total_items;
-
-                        newval = total_items;
-                } while( newval == lastval );
-
-                //return new val
-                return newval;
-	}
-
-        inline _u64 spinheartbeatsnotsafe(_u64 lastval)
-	{
-                _u64 newval;
-                do {
-                        newval = total_items;
-                } while( newval == lastval );
+			        backoff = BACKOFF_START;
+                        newval = readheartbeatsnotsafe(changes);
+                } while( changes == lastchanges );
 
                 return newval;
 	}
@@ -104,15 +94,33 @@ public:
 	        return concurrent ? FAADD(&total_items, 0) : total_items;  
         }
 
+        inline _u64 readheartbeatsnotsafe(_u64& changes) {
+	        changes = total_changes;
+	        return total_items;
+        }
+
+        inline _u64 readheartbeats(_u64& changes) {
+	        changes = concurrent ? FAADD(&total_changes, 0) : total_changes;
+	        return concurrent ? FAADD(&total_items, 0) : total_items;  
+        }
+
         inline void heartbeatnotsafe(int num_beats = 1) {
-	        total_items += num_beats;
+	        if ( num_beats != 0 ) {
+	                total_changes += 1;
+	                total_items += num_beats;
+		}
         }  
 
         inline void heartbeat(int num_beats = 1) {
-	        if ( concurrent )
-                        _u64 tmp = FAADD(&total_items, num_beats);     
-                else 
-		        total_items += num_beats;
+	        if ( num_beats != 0 ) {
+	                if ( concurrent ) {
+		                FAADD(&total_changes, 1);
+                                FAADD(&total_items, num_beats);     
+                        } else {
+		                total_changes += 1;
+		                total_items += num_beats;
+		        }
+                }
         }
         
 
@@ -120,11 +128,15 @@ public:
         // Monitor API
         //---------------------------------------------------------------------------
 
-        inline _u64 waitrewardnotsafe(_u64 lastval) { return waitheartbeatsnotsafe(lastval); }
+        inline _u64 waitchangenotsafe(_u64& changes) { return waitchange(changes); }
 
         inline _u64 getrewardnotsafe() { return readheartbeatsnotsafe(); }
 
         inline _u64 getreward() { return readheartbeats(); }
+
+        inline _u64 getrewardnotsafe(_u64& changes) { return readheartbeatsnotsafe(changes); }
+
+        inline _u64 getreward(_u64& changes) { return readheartbeats(changes); }
 
         inline void addrewardnotsafe(int tid, _u64 amt) { heartbeatnotsafe(amt); }
 
@@ -146,7 +158,8 @@ public:
 	}
 
         PtrNode<FCIntPtr>* contain(final int iThread, PtrNode<FCIntPtr>* final inPtr) {
-	        _u64 rv = waitrewardnotsafe( (_u64) inPtr );
+	        _u64 rv = (_u64) inPtr;
+	        waitchangenotsafe(rv);
                 return (PtrNode<FCIntPtr>*) rv;
 	}    
 

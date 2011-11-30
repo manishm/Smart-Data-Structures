@@ -33,7 +33,7 @@
 #include "Heartbeat.h"
 #include "Monitor.h"
 
-//#define _USE_SMARTLOCK
+#define _USE_SMARTLOCK
 //#define _FC_CAS_STATS
 
 using namespace CCP;
@@ -67,16 +67,21 @@ private:
         //helper function -----------------------------
         inline_ void flat_combining(final int iThread) {
 
+		++FCBase<T>::_cleanup_counter;
                 int maxPasses;
                 if ( !_AUTO_TUNE )
                         maxPasses = FCBase<T>::_num_passes;
-                else
-		        maxPasses = 1 + 4*_learner->getdiscval(_sc_tune_id, iThread);
+                else {
+		        if ( 0 == (FCBase<T>::_cleanup_counter & 0xff) )
+			          maxPasses = 1 + 10*_learner->samplediscval(_sc_tune_id);
+                        else
+                                  maxPasses = 1 + 10*_learner->getdiscval(_sc_tune_id, iThread);
+		}
 
                 int total_changes = 0;
 
                 for (int iTry=0;iTry<maxPasses; ++iTry) {
-		        int num_changes = 0;
+                        int num_changes = 0;
                         //Memory::read_barrier();
 
                         SlotInfo* curr_slot = FCBase<T>::_tail_slot.get();
@@ -89,23 +94,25 @@ private:
                                         curr_slot->_req_ans = FCBase<T>::_NULL_VALUE;
                                         curr_slot->_time_stamp = FCBase<T>::_NULL_VALUE;
                                 } else if(FCBase<T>::_DEQ_VALUE == curr_value) {
+				        if ( iTry == maxPasses - 1 ) {
                                         final FCIntPtr rv = -((FCIntPtr) _heap.deleteMin());
                                         if ( (rv != FCBase<T>::_NULL_VALUE) || (0 == _gIsDedicatedMode) )
                                                 ++num_changes;
                                         curr_slot->_req_ans = rv;
                                         curr_slot->_time_stamp = FCBase<T>::_NULL_VALUE;
+                                        }
                                 }
                                 curr_slot = curr_slot->_next;
                         }//while on slots
 
                         total_changes += num_changes;
-                        if ( _AUTO_REWARD )
-		                _mon->addreward(iThread, num_changes);
+                        //if ( _AUTO_REWARD )
+                        //        _mon->addreward(iThread, num_changes);
 
-		}//for repetition
+                }//for repetition
 
-                //if ( _AUTO_REWARD )
-		//        _mon->addreward(iThread, total_changes);
+                if ( _AUTO_REWARD )
+                        _mon->addreward(iThread, total_changes);
 
         }       
         
@@ -114,8 +121,8 @@ public:
         SmartPairHeap(Monitor* mon, LearningEngine* learner)
         :       _NUM_REP(FCBase<T>::_NUM_THREADS),
                 _REP_THRESHOLD((int)(Math::ceil(FCBase<T>::_NUM_THREADS/(1.7)))),
-	        _mon(mon),
-	        _learner(learner)
+                _mon(mon),
+                _learner(learner)
         {
                 _sc_tune_id = 0;
                 if ( _AUTO_TUNE )
@@ -147,23 +154,25 @@ public:
 
                 SlotInfo* volatile&     my_next = my_slot->_next;
                 FCIntPtr volatile* my_re_ans = &my_slot->_req_ans;
+
+                //test
+                Memory::write_barrier();
                 *my_re_ans = inValue;
 
                 //this is needed because the combiner may remove you
                 if (null == my_next)
-                   FCBase<T>::enq_slot(my_slot);
+                        FCBase<T>::enq_slot(my_slot);
 
-                //Memory::write_barrier();
                 boolean is_cas = _fc_lock->lock(my_re_ans, inValue, iThread);
                 // when we get here, we either aborted or succeeded
                 // abort happens when we got our answer
                 if ( is_cas )
                 {
-                   // got the lock so we should do flat combining
-                   CasInfo& my_cas_info = FCBase<T>::_cas_info_ary[iThread];
-                   ++(my_cas_info._locks);
-                   flat_combining(iThread);
-                   _fc_lock->unlock(iThread);
+                        // got the lock so we should do flat combining
+                        CasInfo& my_cas_info = FCBase<T>::_cas_info_ary[iThread];
+                        ++(my_cas_info._locks);
+                        flat_combining(iThread);
+                        _fc_lock->unlock(iThread);
                 }
                 return true;
         }
@@ -182,16 +191,16 @@ public:
 
                 //this is needed because the combiner may remove you
                 if(null == my_next)
-                   FCBase<T>::enq_slot(my_slot);
+                        FCBase<T>::enq_slot(my_slot);
 
                 //Memory::write_barrier();
                 boolean is_cas = _fc_lock->lock(my_re_ans, FCBase<T>::_DEQ_VALUE, iThread);
                 if( is_cas ) 
                 {
-                   CasInfo& my_cas_info = FCBase<T>::_cas_info_ary[iThread];
-                   ++(my_cas_info._locks);
-                   flat_combining(iThread);
-                   _fc_lock->unlock(iThread);
+                        CasInfo& my_cas_info = FCBase<T>::_cas_info_ary[iThread];
+                        ++(my_cas_info._locks);
+                        flat_combining(iThread);
+                        _fc_lock->unlock(iThread);
                 }
                 return (PtrNode<T>*) -(*my_re_ans);
         }
@@ -316,7 +325,7 @@ public:
         }
 
         final char* name() {
-                return "SmartPairHeap";
+                return _AUTO_TUNE ? "SmartPairHeap" : "FCPairHeap";
         }
 
         void cas_reset(final int iThread) {

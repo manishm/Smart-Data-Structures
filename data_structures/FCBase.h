@@ -120,8 +120,8 @@ protected:
         CasInfo           _cas_info_ary[_MAX_THREADS];
         int               _cpu_cash_contamination[8*1024*1024];
         int               _iTry[_MAX_THREADS*CACHE_LINE_SIZE];
-
-
+        volatile int      _cleanup_counter ATTRIBUTE_CACHE_ALIGNED;
+        char              _pad[CACHE_LINE_SIZE];
 
         //helper function -----------------------------
 
@@ -248,7 +248,8 @@ public:
         FCBase( final int num_threads = _gNumThreads, final boolean is_use_condition = false) 
         :       _NUM_THREADS(num_threads), 
                 _IS_USE_CONDITION(is_use_condition),
-                _sync_count(0)
+	        _sync_count(0), 
+	        _cleanup_counter(0)
         {
                 init_architecture_specific();
                 init_slot_list();

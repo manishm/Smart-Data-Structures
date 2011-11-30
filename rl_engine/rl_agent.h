@@ -62,19 +62,21 @@ typedef Vector<double> vector_t;
 // =============================================================================
 
 #include "rl_util.cpp"
+#include "cpp_framework.h"
 
 // =============================================================================
 
 unsigned int _unique_seed = 0;
 
 class rl_act {
+
  public:
   rl_act() {
     srand48_r( time(NULL) + _unique_seed, &rng_state );
     _unique_seed++;
-  };
+  }
 
-  virtual void act_sample( void ) {};
+  virtual void act_sample( void ) = 0;
 
   // thread-safe random number generator state
   struct drand48_data rng_state;
@@ -182,7 +184,8 @@ class rl_act_discrete : public rl_act {
     num_opts = _num_opts;
     vals = _vals;
 
-    stepsize = .1;
+    //stepsize = .1;
+    stepsize = 3.0;
     //stepsize = .75;
     //stepsize = .5;
     //stepsize = 1.0;
@@ -206,25 +209,77 @@ class rl_act_discrete : public rl_act {
 typedef std::vector< rl_act * > act_vec;
 
 class rl_nac {
+  
+ private:
+
+  //slowdown 
+  double               rl_to_sleepidle_ratio  ATTRIBUTE_CACHE_ALIGNED;
+  bool                 inject_delay;
+  _u64                 time_window[8];
+  int                  time_indx;
+  _u64                 injection_nanos;
+  timespec             time1;
+  timespec             time2;
+  _u64                 time_sum ATTRIBUTE_CACHE_ALIGNED;
+
+  void slowdown_part1()
+  {
+    clock_gettime( CLOCK_REALTIME, &time1 );
+  }
+
+  void slowdown_part2()
+  {
+    clock_gettime( CLOCK_REALTIME, &time2 );
+    _u64 delta = CCP::Thread::difftimes(time1,time2);
+    time_sum = time_sum - time_window[time_indx] + delta;
+    time_window[time_indx] = delta;
+    time_indx = (time_indx + 1) % 8;
+    double avg = ((double) time_sum) / 8.;
+    injection_nanos = (_u64) (avg / rl_to_sleepidle_ratio);
+
+    //cerr << "injection_nanos= " << injection_nanos << endl;
+    if ( inject_delay ) 
+      CCP::Thread::delay(injection_nanos);
+  }
+
+  void initSlowdownMode(double slowdownratio)
+  {
+    rl_to_sleepidle_ratio = slowdownratio;
+    inject_delay = (rl_to_sleepidle_ratio != 1.0);
+
+    const _u64 rlnanos = 1000;
+
+    time_sum           = 8 * rlnanos;
+    injection_nanos    = (_u64) ((((double) time_sum) / 8.) / rl_to_sleepidle_ratio);
+    time_indx          = 0;
+
+    for(int i = 0; i < 8; i++)
+      time_window[i] = rlnanos;
+  }
+
+  void deinitSlowdownMode()
+  { }
+
 
  public:
 
   // construction and setup
-  rl_nac( int state_feat_cnt );
+  rl_nac( int state_feat_cnt, double slowdownfactor );
   void add_action( rl_act_type_t type,
 		   int first_param,
 		   int second_param,
-		   void *vals );
+		   void *vals);
   void update_sizes( void );
 
   // NAC algorithm methods
   void update( double reward, double *statefeats );
   void add_obs( double reward, double *statefeats );
   vector_t collect_gradient( void );
-  void solve_for_grad( void );
-  bool check_for_convergence( void );
+  void solve_for_grad( vector_t& guess );
+  bool check_for_convergence( vector_t& guess, vector_t& prev_guess );
   void take_gradient_step( void );
   bool time_to_check( void );
+  void farm_out_grad( vector_t& converged_grad );
   
   /* description of state features */
   int state_feat_cnt;
@@ -238,11 +293,15 @@ class rl_nac {
   double gamma;  /* rl discount factor */
   double beta;   /* forgetting factor */
   double lambda; /* eligibility trace parameter */
+  double epsilon;/* gradient guess threshold */
+
   
   /* current state of all needed variables */
   matrix_t A;
   vector_t b, z;
   vector_t phi_xt;
+
+  vector_t prev_grad_guess, tmpvec;
 
   // some hackish stuff
   int updates_since_last_step;

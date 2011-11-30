@@ -42,7 +42,7 @@ private:
 
         //backoff settings in nanoseconds
         static final _u64  BACKOFF_START  = 100;
-        static final _u64  BACKOFF_MAX    = 1600;
+        static final _u64  BACKOFF_MAX    = 6400;
 
         char pad                          ATTRIBUTE_CACHE_ALIGNED;
 
@@ -64,8 +64,10 @@ public:
                 _u64 intbuffer =  (((((_u64) _buffer) + CACHE_LINE_SIZE - 1) / CACHE_LINE_SIZE) * CACHE_LINE_SIZE);
                 _counters = (volatile _u64*) intbuffer;
 
-                for(int i = 0; i < _nthreads; i++)
+                for(int i = 0; i < _nthreads; i++) {
 		        _counters[i * CACHE_LINE_SIZE / sizeof(_u64)] = 0;
+                        _counters[1 + i * CACHE_LINE_SIZE / sizeof(_u64)] = 0;
+		}
 
 		CCP::Memory::read_write_barrier();
         }
@@ -79,9 +81,12 @@ public:
 	{
 	        //assume each counter is only written by one thread at a time
                 //there is one counter per cacheline so atomic ops are not needed
-	        tid = _concurrent ? tid : 0;
-	        _counters[tid * CACHE_LINE_SIZE / sizeof(_u64)] += iAmt;
-		//std::cerr << "i'm here" << std::endl;
+	        if ( iAmt != 0 ) {
+	                tid = _concurrent ? tid : 0;
+	                _counters[tid * CACHE_LINE_SIZE / sizeof(_u64)] += iAmt;
+	                _counters[1 + tid * CACHE_LINE_SIZE / sizeof(_u64)] += 1;
+		        //std::cerr << "i'm here" << std::endl;
+		}
 	}
 
         inline void reset(int tid)
@@ -90,6 +95,7 @@ public:
                 //there is one counter per cacheline so atomic ops are not needed
 	        tid = _concurrent ? tid : 0;
 	        _counters[tid * CACHE_LINE_SIZE / sizeof(_u64)] = 0;
+	        _counters[1 + tid * CACHE_LINE_SIZE / sizeof(_u64)] = 0;
 	}
 
         inline _u64 get()
@@ -103,11 +109,25 @@ public:
                 return sum;
 	}
 
-        inline _u64 waitchange(_u64 lastval)
+        inline _u64 get(_u64& changes)
 	{
-                //check if changed. if so return new val.
-	        _u64 newval = get();
-                if ( newval != lastval )
+                //TODO. next-line prefetch hints might be very useful
+	        _u64 sum = 0;
+                changes = 0;
+	        for(int i = 0; i < _nthreads; i++) {
+                        changes += _counters[1 + i * CACHE_LINE_SIZE / sizeof(_u64)];
+		        sum += _counters[i * CACHE_LINE_SIZE / sizeof(_u64)];
+		}
+
+                return sum;
+	}
+
+        inline _u64 waitchange(_u64& changes)
+	{
+                //check if changed. if so return newval.
+	        _u64 lastchanges = changes;
+	        _u64 newval = get(changes);
+                if ( changes != lastchanges )
                         return newval;
 
                 //spin with backoff until val changes
@@ -116,21 +136,9 @@ public:
                         CCP::Thread::delay(backoff);
                         backoff <<= 1;
                         if ( backoff > BACKOFF_MAX )
-			        return get();
-
-                        newval = get();
-                } while( newval == lastval );
-
-                //return new val
-                return newval;
-	}
-
-        inline _u64 spinchange(_u64 lastval)
-	{
-	        _u64 newval;
-                do {
-                        newval = get();
-                } while( newval == lastval );
+			        backoff = BACKOFF_START;
+                        newval = get(changes);
+                } while( changes == lastchanges );
 
                 return newval;
 	}
@@ -139,11 +147,15 @@ public:
         // Monitor API
         //---------------------------------------------------------------------------
 
-        inline _u64 waitrewardnotsafe(_u64 lastval) { return waitchange(lastval); }
+        inline _u64 waitchangenotsafe(_u64& changes) { return waitchange(changes); }
 
         inline _u64 getrewardnotsafe() { return get(); }
 
         inline _u64 getreward() { return get(); }
+
+        inline _u64 getrewardnotsafe(_u64& changes) { return get(changes); }
+
+        inline _u64 getreward(_u64& changes) { return get(changes); }
 
         inline void addrewardnotsafe(int tid, _u64 amt) { increment(tid, amt); }
 
@@ -165,7 +177,8 @@ public:
 	}
 
         PtrNode<FCIntPtr>* contain(final int iThread, PtrNode<FCIntPtr>* final inPtr) {
-	        _u64 rv = waitrewardnotsafe( (_u64) inPtr );
+	        _u64 rv = (_u64) inPtr;
+                waitchangenotsafe(rv);
                 return (PtrNode<FCIntPtr>*) rv;
 	}    
 

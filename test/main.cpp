@@ -40,21 +40,20 @@
 
 //FC research includes .................................
 //queues
-#include "FCQueue.h"
 #include "SmartQueue.h"
 #include "MSQueue.h"
 #include "BasketsQueue.h"
 //#include "ComTreeQueue.h"
 #include "OyamaQueue.h"
+//#include "MutexQueue.h"
 //#include "OyamaQueueCom.h"
 //skiplists
-#include "FCSkipList.h"
 #include "SmartSkipList.h"
 #include "LFSkipList.h"
 #include "LazySkipList.h"
 //pairheaps
-#include "FCPairingHeap.h"
 #include "SmartPairingHeap.h"
+#include "MutexPairingHeap.h"
 //stacks
 #include "FCStack.h"
 //#include "SmartStack.h"  //doesn't exist yet
@@ -109,9 +108,9 @@ static boolean                          _is_view=false;
 static Monitor*                         _mon;
 
 static final int                        _num_work_amts             = 10;
-static int                            _work_amts[_num_work_amts] = {800, 6400, 200, 3200, 1600, 100, 400, 100, 400, 800};
+//static int                            _work_amts[_num_work_amts] = {800, 6400, 200, 3200, 1600, 100, 400, 100, 400, 800};
 //static int                            _work_amts[_num_work_amts] = {1600, 200, 400, 1600, 200, 1600, 3200, 100, 200, 800};
-//static int                              _work_amts[_num_work_amts] = {800, 100, 6400, 200, 200, 100, 400, 800, 3200, 400};
+static int                              _work_amts[_num_work_amts] = {800, 100, 6400, 200, 200, 100, 400, 800, 3200, 400};
 //static int                            _work_amts[_num_work_amts] = {400, 200, 400, 200, 400, 200, 400, 200, 400, 200};
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -782,6 +781,10 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* lear
         //if(0 == strcmp(alg_name, "oyqueuecom")) {
         //          return (new OyamaQueueCom<FCIntPtr>());
         //}
+        //works but not compatible with a hack used in this benchmark
+        //if(0 == strcmp(alg_name, "mutexqueue")) {
+        //        return (new MutexQueue<FCIntPtr>());
+        //}
 
         //skiplist .................................................................
         if(0 == strcmp(alg_name, "fcskiplist")) {
@@ -809,6 +812,9 @@ FCBase<FCIntPtr>* CreateDataStructure(char* final alg_name, LearningEngine* lear
 	                return (new SmartPairHeap<FCIntPtr,true,true>(_mon, learner));
 		else
 		        return (new SmartPairHeap<FCIntPtr,true,false>(_mon, learner));
+        }
+        if(0 == strcmp(alg_name, "mutexpairheap")) {
+	        return (new MutexPairHeap<FCIntPtr>());
         }
 
         //stack ....................................................................
